@@ -1057,9 +1057,9 @@ function doDailyReset(){
   showToast(`Day reset — ${count} recurring task${count!==1?'s':''} ready to go.`);
 }
 
-const AI_HEADERS = {'Content-Type':'application/json','anthropic-version':'2023-06-01'};
+const AI_HEADERS = {'Content-Type':'application/json'};
 
-async function askAI(){const btn=document.getElementById('aiBtn');btn.classList.add('loading');btn.innerHTML='⏳ Thinking...';const pending=tasks.filter(t=>!t.done).slice(0,12).map(t=>`- "${t.title}" (${t.cat}, ${t.pri} priority${t.due?', due '+t.due:''}${t.recur?', '+t.recur:''}${t.est?', ~'+t.est:''})`).join('\n');const prompt=`You are a productivity coach. Here are my pending to-do tasks:\n${pending}\n\nGive me a sharp, personalized prioritization. Tell me the top 3 I should do RIGHT NOW and briefly why (1 sentence each). Keep it direct, under 80 words total. No bullet symbols, use 1. 2. 3.`;try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:AI_HEADERS,body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,messages:[{role:'user',content:prompt}]})});const data=await res.json();const text=data.content?.map(c=>c.text||'').join('')||'Could not get a response.';const panel=document.getElementById('aiPanel');panel.style.display='';panel.innerHTML=`<div class="ai-panel"><div class="ai-panel-head"><div class="ai-panel-head-left">✨<span>AI recommendation</span></div><button class="ai-close" onclick="document.getElementById('aiPanel').style.display='none'">✕</button></div><div class="ai-panel-body">${text.replace(/\n/g,'<br>')}</div></div>`;}catch(e){showToast('Could not reach AI');}btn.classList.remove('loading');btn.innerHTML='✨ What first? ↗';}
+async function askAI(){const btn=document.getElementById('aiBtn');btn.classList.add('loading');btn.innerHTML='⏳ Thinking...';const pending=tasks.filter(t=>!t.done).slice(0,12).map(t=>`- "${t.title}" (${t.cat}, ${t.pri} priority${t.due?', due '+t.due:''}${t.recur?', '+t.recur:''}${t.est?', ~'+t.est:''})`).join('\n');const prompt=`You are a productivity coach. Here are my pending to-do tasks:\n${pending}\n\nGive me a sharp, personalized prioritization. Tell me the top 3 I should do RIGHT NOW and briefly why (1 sentence each). Keep it direct, under 80 words total. No bullet symbols, use 1. 2. 3.`;try{const res=await fetch('/api/claude',{method:'POST',headers:AI_HEADERS,body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,messages:[{role:'user',content:prompt}]})});const data=await res.json();const text=data.content?.map(c=>c.text||'').join('')||'Could not get a response.';const panel=document.getElementById('aiPanel');panel.style.display='';panel.innerHTML=`<div class="ai-panel"><div class="ai-panel-head"><div class="ai-panel-head-left">✨<span>AI recommendation</span></div><button class="ai-close" onclick="document.getElementById('aiPanel').style.display='none'">✕</button></div><div class="ai-panel-body">${text.replace(/\n/g,'<br>')}</div></div>`;}catch(e){showToast('Could not reach AI');}btn.classList.remove('loading');btn.innerHTML='✨ What first? ↗';}
 
 async function askQuickWin(){
   const btn=document.getElementById('quickWinBtn');
@@ -1068,7 +1068,7 @@ async function askQuickWin(){
   const pending=tasks.filter(t=>!t.done).map(t=>`- "${t.title}" (${t.cat}, ${t.pri} priority, energy: ${t.energy||'med'}${t.est?', est: '+t.est:''}${t.subtasks&&t.subtasks.length?' — '+t.subtasks.length+' subtasks':''})`).join('\n');
   const prompt=`You are a productivity coach. Here are my pending tasks:\n${pending}\n\nIdentify the ONE task I can realistically finish in under 2 minutes right now. Strongly prefer tasks with a short time estimate (5m or 15m). Reply in exactly this format — nothing else:\n\n⚡ [task name]\n[One punchy sentence on why it's the quickest win right now.]`;
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:AI_HEADERS,body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:80,messages:[{role:'user',content:prompt}]})});
+    const res=await fetch('/api/claude',{method:'POST',headers:AI_HEADERS,body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:80,messages:[{role:'user',content:prompt}]})});
     const data=await res.json();
     const text=data.content?.map(c=>c.text||'').join('')||'Could not get a response.';
     const panel=document.getElementById('aiPanel');
@@ -1094,7 +1094,7 @@ async function weeklyReview(){
   const highPending=tasks.filter(t=>t.pri==='high'&&!t.done).map(t=>t.title).slice(0,5).join('; ');
   const prompt=`You are a productivity coach giving a sharp weekly review. Stats: ${doneCount} tasks completed all-time, ${pendingCount} pending, ${weeklyDone} done this week. Category load: ${catBreakdown||'none'}. High priority pending: ${highPending||'none'}.\n\nGive a 3-part weekly review in under 100 words: (1) one honest assessment of this week, (2) one key insight about where attention is needed, (3) one concrete action for next week. Be direct and personal.`;
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:AI_HEADERS,body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,messages:[{role:'user',content:prompt}]})});
+    const res=await fetch('/api/claude',{method:'POST',headers:AI_HEADERS,body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,messages:[{role:'user',content:prompt}]})});
     const data=await res.json();
     const text=data.content?.map(c=>c.text||'').join('')||'Could not get a response.';
     const panel=document.getElementById('aiPanelGlobal');
@@ -1133,7 +1133,7 @@ Write a punchy, personalized daily briefing in exactly 3 short paragraphs under 
 3. One sharp motivational nudge to kick off the day. Be human, direct, never cheesy.`;
 
   try{
-    const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:AI_HEADERS,body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:180,messages:[{role:'user',content:prompt}]})});
+    const res = await fetch('/api/claude',{method:'POST',headers:AI_HEADERS,body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:180,messages:[{role:'user',content:prompt}]})});
     const data = await res.json();
     const text = data.content?.map(c=>c.text||'').join('')||'Could not get briefing.';
     const panel = document.getElementById('aiPanelGlobal');
