@@ -1679,7 +1679,9 @@ render();
 
 // ── Firebase real-time sync (additive layer) ─────────
 const DB_URL = 'https://my-todos-c62fd-default-rtdb.firebaseio.com/household';
-const CLIENT_ID = Math.random().toString(36).substr(2,9);
+// Stable client ID — persists across page reloads
+let CLIENT_ID = localStorage.getItem('todo_client_id');
+if(!CLIENT_ID){ CLIENT_ID = Math.random().toString(36).substr(2,9); localStorage.setItem('todo_client_id', CLIENT_ID); }
 let lastSyncAt = 0;
 let ourSaveTime = 0;  // track when WE last saved
 let isSaving = false;
