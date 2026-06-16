@@ -457,7 +457,7 @@ body{
     <button class="icon-btn" onclick="confirmDailyReset()" aria-label="Daily reset" title="Daily reset">🌅</button>
 
     <button class="icon-btn" onclick="openHistory()" aria-label="History" title="Completion history">📋</button>
-    <div onclick="promptForName()" style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:var(--tx3);cursor:pointer;" title="Tap to set your name"><div id="syncDot" style="width:8px;height:8px;border-radius:50%;background:var(--amber);"></div><span id="syncLabel">Sync off</span><span id="nameLabel" style="margin-left:4px;"></span></div>
+    <div onclick="promptForName()" style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--tx3);cursor:pointer;padding:6px 12px;border-radius:20px;border:1.5px solid var(--br2);background:var(--bg2);" title="Tap to set your name"><div id="syncDot" style="width:8px;height:8px;border-radius:50%;background:var(--amber);flex-shrink:0;"></div><span id="syncLabel" style="font-size:10px;">Sync off</span><span id="nameLabel"></span></div>
 
   </div>
 </div>
@@ -1386,7 +1386,7 @@ function calcEstRemaining(){
 function render(){
   refreshAssignDropdown();
   const _nl=document.getElementById('nameLabel');
-  if(_nl) _nl.innerHTML = MY_NAME ? `· <span style="color:${getUserColor(MY_NAME)};">${MY_NAME}</span>` : '· <span style="color:var(--accent);">Set name</span>';
+  if(_nl) _nl.innerHTML = MY_NAME ? `<span style="color:${getUserColor(MY_NAME)};font-weight:800;">👤 ${MY_NAME}</span>` : '<span style="color:var(--accent);font-weight:800;">👤 Tap to set name</span>';
   const done=tasks.filter(t=>t.done).length,total=tasks.length,pct=total?Math.round((done/total)*100):0;
   const openCount=tasks.filter(t=>!t.done).length;
   document.getElementById('mTotal').textContent=openCount;document.getElementById('mDone').textContent=done;
