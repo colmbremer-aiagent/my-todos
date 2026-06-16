@@ -272,6 +272,7 @@ body{
 .task-note.expanded{white-space:normal;overflow:visible;text-overflow:unset;}
 /* Badges row — sits BELOW title on mobile, inline on desktop */
 .task-badges{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:6px;}
+.owner-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:800;letter-spacing:0.02em;}
 .task-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;}
 .tag{font-size:10px;padding:2px 8px;border-radius:20px;background:var(--bg3);color:var(--tx2);border:1px solid var(--br);font-weight:600;}
 .subtasks{margin-top:8px;display:flex;flex-direction:column;gap:4px;}
@@ -456,7 +457,7 @@ body{
     <button class="icon-btn" onclick="confirmDailyReset()" aria-label="Daily reset" title="Daily reset">🌅</button>
 
     <button class="icon-btn" onclick="openHistory()" aria-label="History" title="Completion history">📋</button>
-    <div style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:var(--tx3);"><div id="syncDot" style="width:8px;height:8px;border-radius:50%;background:var(--amber);"></div><span id="syncLabel">Sync off</span></div>
+    <div onclick="promptForName()" style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:var(--tx3);cursor:pointer;" title="Tap to set your name"><div id="syncDot" style="width:8px;height:8px;border-radius:50%;background:var(--amber);"></div><span id="syncLabel">Sync off</span><span id="nameLabel" style="margin-left:4px;"></span></div>
 
   </div>
 </div>
@@ -533,6 +534,7 @@ body{
         <option value="2h">2 hours</option>
         <option value="2h+">2h+</option>
       </select>
+      <select class="qa-select" id="qaAssign" title="Assign to"><option value="">👤 Anyone</option></select>
       <button class="qa-btn" onclick="addTask()">+ Add ↗</button>
     </div>
     <div class="qa-row">
@@ -545,6 +547,7 @@ body{
 
   <div class="filters">
     <button class="pill active" data-filter="all" onclick="setFilter('all',this)">All</button>
+    <button class="pill" data-filter="forme" onclick="setFilter('forme',this)" style="font-weight:800;">⭐ For me</button>
     <button class="pill" data-filter="family" onclick="setFilter('family',this)">Family</button>
     <button class="pill" data-filter="home" onclick="setFilter('home',this)">Home</button>
     <button class="pill" data-filter="errands" onclick="setFilter('errands',this)">Errands</button>
@@ -885,9 +888,10 @@ function addTask(){
   const rawTags=document.getElementById('qaTags').value.trim();const tags=rawTags?rawTags.split(',').map(s=>s.trim()).filter(Boolean):[];
   const rawSubs=document.getElementById('qaSubtasks').value.trim();const subtasks=rawSubs?rawSubs.split(',').map(s=>({text:s.trim(),done:false})).filter(s=>s.text):[];
   const urgent=due===todayStr;
-  tasks.unshift({id:nextId++,title,cat,due,pri,energy,note,tags,recur,est,subtasks,urgent,done:false,elapsed:0,createdAt:todayStr});
+  const assignee=document.getElementById('qaAssign').value||'';
+  tasks.unshift({id:nextId++,title,cat,due,pri,energy,note,tags,recur,est,subtasks,urgent,done:false,elapsed:0,createdAt:todayStr,owner:MY_NAME||'',assignee:assignee,ownerColor:getUserColor(MY_NAME)});
   ['qaInput','qaDate','qaNote','qaTags','qaSubtasks'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  document.getElementById('qaEst').value='';;
+  document.getElementById('qaEst').value='';document.getElementById('qaAssign').value='';
   save();render();showToast('✓ Task added');
   try{ if(typeof sendPrompt==='function') sendPrompt(`Add to reminders: "${title}" — ${cat}, ${pri} priority${due?' due '+due:''}${recur?' repeats '+recur:''}${note?' — '+note:''}${tags.length?' tags: '+tags.join(', '):''}`); }catch(e){}}
 
@@ -899,6 +903,9 @@ function toggle(id){
     t.completedAt = todayStr;
     completedDays.add(todayStr);
     completionLog[todayStr]=(completionLog[todayStr]||0)+1;
+    // Log to permanent history
+    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',owner:t.owner||'',assignee:t.assignee||'',completedAt:todayStr,completedTs:Date.now()});
+    if(completedHistory.length>500) completedHistory=completedHistory.slice(0,500);
     if(t.recur){
       // Build the rescheduled copy
       const next={...t,id:nextId++,done:false,elapsed:0,subtasks:t.subtasks.map(s=>({...s,done:false}))};
@@ -964,7 +971,14 @@ function closeHistory(){
 }
 
 function renderHistory(){
-  const done = tasks.filter(t=>t.done);
+  // Combine permanent history log + any currently-done tasks not yet in the log
+  const fromLog = (completedHistory||[]).map(h=>({...h}));
+  const currentDone = tasks.filter(t=>t.done).map(t=>({title:t.title,cat:t.cat,est:t.est||'',owner:t.owner||'',assignee:t.assignee||'',completedAt:t.completedAt||todayStr,completedTs:0}));
+  // Merge — avoid duplicating tasks that are both done AND in the log (match by title+date)
+  const seen = new Set(fromLog.map(h=>h.title+'|'+h.completedAt));
+  const done = [...fromLog];
+  currentDone.forEach(t=>{ if(!seen.has(t.title+'|'+t.completedAt)) done.push(t); });
+
   const totalDone = done.length;
   const cats = {};
   done.forEach(t=>{ cats[t.cat]=(cats[t.cat]||0)+1; });
@@ -986,7 +1000,7 @@ function renderHistory(){
   const today = new Date(); today.setHours(0,0,0,0);
   const groups = {};
   done.forEach(t=>{
-    const raw = t.completedAt || t.createdAt || null;
+    const raw = t.completedAt || null;
     let label = 'Earlier';
     if(raw){
       const d = new Date(raw); d.setHours(0,0,0,0);
@@ -1017,13 +1031,17 @@ function renderHistory(){
         <div class="history-group-title">${label}</div>
         <span class="history-group-count">${grp.length} task${grp.length!==1?'s':''}</span>
       </div>
-      ${grp.map(t=>`
+      ${grp.map(t=>{
+        const who = t.assignee||t.owner||'';
+        const whoColor = who?getUserColor(who):'';
+        return `
         <div class="history-item">
           <div class="history-check">✓</div>
           <div class="history-title">${t.title}</div>
+          ${who?`<span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;background:${whoColor}1A;color:${whoColor};">${who}</span>`:''}
           <span class="history-cat badge ${t.cat}">${t.cat}</span>
           ${t.est?`<span style="font-size:10px;color:var(--tx3);font-weight:600;">⏱${t.est}</span>`:''}
-        </div>`).join('')}
+        </div>`;}).join('')}
     `;
     list.appendChild(groupEl);
   });
@@ -1101,9 +1119,12 @@ function bulkComplete(){
   selectedIds.forEach(id=>{
     const t=tasks.find(t=>t.id===id); if(!t||t.done) return;
     t.done=true;
+    t.completedAt=todayStr;
     completedDays.add(todayStr);
     completionLog[todayStr]=(completionLog[todayStr]||0)+1;
+    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',owner:t.owner||'',assignee:t.assignee||'',completedAt:todayStr,completedTs:Date.now()});
   });
+  if(completedHistory.length>500) completedHistory=completedHistory.slice(0,500);
   const n=selectedIds.size;
   selectedIds.clear(); selectMode=false;
   save(); render(); renderBulkBar();
@@ -1250,6 +1271,8 @@ function getVisible(){
     v=tasks.filter(t=>t.pri==='high'&&!t.done);
   } else if(currentFilter==='recurring'){
     v=tasks.filter(t=>t.recur&&!t.done);
+  } else if(currentFilter==='forme'){
+    v=tasks.filter(t=>!t.done && (t.assignee===MY_NAME || (!t.assignee && t.owner===MY_NAME)));
   } else {
     v=tasks.filter(t=>t.cat===currentFilter&&!t.done);
   }
@@ -1326,6 +1349,9 @@ function calcEstRemaining(){
 }
 
 function render(){
+  refreshAssignDropdown();
+  const _nl=document.getElementById('nameLabel');
+  if(_nl) _nl.innerHTML = MY_NAME ? `· <span style="color:${getUserColor(MY_NAME)};">${MY_NAME}</span>` : '· <span style="color:var(--accent);">Set name</span>';
   const done=tasks.filter(t=>t.done).length,total=tasks.length,pct=total?Math.round((done/total)*100):0;
   const openCount=tasks.filter(t=>!t.done).length;
   document.getElementById('mTotal').textContent=openCount;document.getElementById('mDone').textContent=done;
@@ -1464,6 +1490,17 @@ function makeTask(t,isFocus,rank){
   const age=getTaskAge(t);
   const ageHTML=age?`<span class="age-badge ${age.cls}" title="Created ${age.days} days ago">${age.label}</span>`:'';
   const estHTML=`<span class="time-est-badge${['5m','15m'].includes(t.est)?' quick':''}" data-est="${t.id}" title="Tap to change estimate" style="cursor:pointer;${!t.est?'opacity:0.35;':''}">⏱${t.est||'est'}</span>`;
+  // Assignee badge (who the task is FOR) takes priority; falls back to owner
+  let ownerHTML = '';
+  if(t.assignee){
+    const ac = getUserColor(t.assignee);
+    const fromTxt = (t.owner && t.owner!==t.assignee) ? ` (from ${t.owner})` : '';
+    ownerHTML = `<span class="owner-badge" style="background:${ac}1A;color:${ac};border:1px solid ${ac}66;" title="For ${t.assignee}${fromTxt}">➡ ${t.assignee}</span>`;
+  } else if(t.owner){
+    const oc = getUserColor(t.owner);
+    ownerHTML = `<span class="owner-badge" style="background:${oc}1A;color:${oc};border:1px solid ${oc}66;" title="Added by ${t.owner}">${t.owner}</span>`;
+  }
+  const ownerColor = t.assignee ? getUserColor(t.assignee) : (t.ownerColor || (t.owner ? getUserColor(t.owner) : ''));
 
   // Grab live search query for highlighting
   const _sq=document.getElementById('searchInput');
@@ -1476,13 +1513,13 @@ function makeTask(t,isFocus,rank){
       ? `<div class="task-select-overlay${selectedIds.has(t.id)?' selected':''}" data-sel="${t.id}"></div>`
       : `<div class="drag-handle" data-drag="${t.id}">⠿</div>`
     }
-    <div class="check" data-check="${t.id}">${t.done?'✓':''}</div>
+    <div class="check" data-check="${t.id}" style="${ownerColor && !t.done ? 'border-color:'+ownerColor+';' : ''}">${t.done?'✓':''}</div>
     <div class="task-body">
       <div class="task-title">${titleHTML}${t.recur?` ↻`:''}</div>
       ${noteHTML?`<div class="task-note" data-note="${t.id}" title="Tap to expand">${noteHTML}</div>`:''}
       ${tagsHTML}
       <div class="task-badges">
-        ${timerHTML}${energyHTML}${ageHTML}
+        ${ownerHTML}${timerHTML}${energyHTML}${ageHTML}
         <span class="time-est-badge${['5m','15m'].includes(t.est)?' quick':''}" data-est="${t.id}" title="Tap to change estimate" style="cursor:pointer;${!t.est?'opacity:0.35;':''}">⏱${t.est||'est'}</span>
         <div class="pri-dot ${t.pri||'med'}" data-pri="${t.id}" title="Click to change priority"></div>
         <span class="badge ${t.cat}" data-cat="${t.id}" title="Click to change category" style="cursor:pointer;">${t.cat}</span>
@@ -1497,7 +1534,7 @@ function makeTask(t,isFocus,rank){
       </div>
     </div>
     <div class="task-right">
-      ${timerHTML}${energyHTML}${ageHTML}
+      ${ownerHTML}${timerHTML}${energyHTML}${ageHTML}
       <span class="time-est-badge${['5m','15m'].includes(t.est)?' quick':''}" data-est="${t.id}" title="Tap to change estimate" style="cursor:pointer;${!t.est?'opacity:0.35;':''}">⏱${t.est||'est'}</span>
       <div class="pri-dot ${t.pri||'med'}" data-pri="${t.id}" title="Click to change priority"></div>
       <span class="badge ${t.cat}" data-cat="${t.id}" title="Click to change category" style="cursor:pointer;">${t.cat}</span>
@@ -1603,6 +1640,7 @@ function makeTask(t,isFocus,rank){
 // ── Parking lot ──────────────────────────────────
 let parkedTasks = [];
 let parkingOpen = false;
+let completedHistory = [];  // permanent log of completed tasks
 
 function loadParked(){
   try{ const r=localStorage.getItem('parked_v9'); if(r) parkedTasks=JSON.parse(r); }catch(e){}
@@ -1682,6 +1720,46 @@ render();
 const DB_URL = 'https://my-todos-c62fd-default-rtdb.firebaseio.com/household';
 let CLIENT_ID = localStorage.getItem('todo_client_id');
 if(!CLIENT_ID){ CLIENT_ID = Math.random().toString(36).substr(2,9); localStorage.setItem('todo_client_id',CLIENT_ID); }
+
+// ── User identity ────────────────────────────────────
+let MY_NAME = localStorage.getItem('todo_user_name') || '';
+const USER_COLORS = {
+  // assigned by name — first user gets indigo, second gets teal
+};
+function getUserColor(name){
+  if(!name) return '#9490B2';
+  // Deterministic color from name
+  const palette = ['#5533E8','#0E9488','#C0341F','#B86200','#7C3AED','#0369A1'];
+  let hash=0; for(let i=0;i<name.length;i++) hash=name.charCodeAt(i)+((hash<<5)-hash);
+  return palette[Math.abs(hash)%palette.length];
+}
+function promptForName(){
+  const name = prompt('What\'s your name? (so tasks show who added them)');
+  if(name && name.trim()){
+    MY_NAME = name.trim();
+    localStorage.setItem('todo_user_name', MY_NAME);
+    render();
+  }
+}
+// Ask for name on first visit
+if(!MY_NAME){ setTimeout(promptForName, 800); }
+
+// ── Known users (learned from tasks + this device) ───
+function getKnownUsers(){
+  const names = new Set();
+  if(MY_NAME) names.add(MY_NAME);
+  tasks.forEach(t=>{ if(t.owner) names.add(t.owner); if(t.assignee) names.add(t.assignee); });
+  return [...names];
+}
+function refreshAssignDropdown(){
+  const sel = document.getElementById('qaAssign');
+  if(!sel) return;
+  const current = sel.value;
+  const users = getKnownUsers();
+  sel.innerHTML = '<option value="">👤 Anyone</option>' +
+    users.map(u=>`<option value="${u}">For ${u}</option>`).join('');
+  if(current && users.includes(current)) sel.value = current;
+}
 let isSaving = false;
 let lastAppliedAt = 0;
 let ourSaveTime = 0;
@@ -1698,7 +1776,7 @@ function syncSave(){
   setSyncUI('saving');
   ourSaveTime=Date.now();
   const ts=ourSaveTime;
-  const data={tasks,completedDays:[...completedDays],completionLog,nextId,totalElapsed,parkedTasks,_by:CLIENT_ID,_at:ts};
+  const data={tasks,completedDays:[...completedDays],completionLog,nextId,totalElapsed,parkedTasks,completedHistory,_by:CLIENT_ID,_at:ts};
   fetch(DB_URL+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
     .then(r=>{
       isSaving=false;
@@ -1717,6 +1795,7 @@ function applyFirebaseData(data){
   if(data.nextId) nextId=data.nextId;
   if(data.totalElapsed) totalElapsed=data.totalElapsed;
   if(data.parkedTasks) parkedTasks=data.parkedTasks;
+  if(data.completedHistory) completedHistory=data.completedHistory;
   lastAppliedAt=data._at||Date.now();
   try{localStorage.setItem('todo_v9',JSON.stringify(data));}catch(e){}
   render(); renderParking();
