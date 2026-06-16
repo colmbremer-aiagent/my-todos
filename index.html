@@ -456,7 +456,7 @@ body{
     <button class="icon-btn" onclick="confirmDailyReset()" aria-label="Daily reset" title="Daily reset">🌅</button>
 
     <button class="icon-btn" onclick="openHistory()" aria-label="History" title="Completion history">📋</button>
-
+    <div class="sync-label"><div class="sync-dot" id="syncDot"></div><span id="syncLabel">Connecting...</span></div>
   </div>
 </div>
 
@@ -595,10 +595,23 @@ body{
 <div class="toast" id="toast"></div>
 
 <script>
-// Safety shim — sendPrompt only exists inside Claude artifacts, not standalone HTML
+// Safety shim
 if(typeof sendPrompt === 'undefined') window.sendPrompt = null;
-// Clear any stale theme setting from localStorage
-try{ const s=localStorage.getItem('todo_v9'); if(s){const p=JSON.parse(s);if(p.darkMode!==undefined){delete p.darkMode;localStorage.setItem('todo_v9',JSON.stringify(p));}} }catch(e){}
+
+// ── Firebase config — REPLACE WITH YOUR OWN ──────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyCH3DPzDdRhH2_JNlPPlhtJMsZwUJWMsOs",
+  authDomain: "my-todos-c62fd.firebaseapp.com",
+  databaseURL: "https://my-todos-c62fd-default-rtdb.firebaseio.com",
+  projectId: "my-todos-c62fd",
+  storageBucket: "my-todos-c62fd.firebasestorage.app",
+  messagingSenderId: "845309718069",
+  appId: "1:845309718069:web:8c74eec7b555bda0bc4b7c"
+};
+firebase.initializeApp(firebaseConfig);
+const dbRef = firebase.database().ref('household');
+const CLIENT_ID = Math.random().toString(36).substr(2, 9);
+// ─────────────────────────────────────────────────────────
 
 const todayStr=new Date().toISOString().split('T')[0];
 document.getElementById('qaDate').min=todayStr;
@@ -621,28 +634,71 @@ const DEFAULT_TASKS=[
   {id:10,title:'Fold a load of laundry',cat:'home',due:null,pri:'low',energy:'low-e',note:'',tags:[],recur:'',subtasks:[],urgent:false,done:false,elapsed:0,est:'15m',createdAt:todayStr},
 ];
 
-function loadState(){try{const r=localStorage.getItem('todo_v9');if(r)return JSON.parse(r);}catch(e){}return null;}
-function save(){try{localStorage.setItem('todo_v9',JSON.stringify({tasks,completedDays:[...completedDays],completionLog,nextId,totalElapsed,darkMode}));}catch(e){}}
 
-let tasks,completedDays,completionLog,nextId,totalElapsed,darkMode;
-const saved=loadState();
-if(saved){
-  tasks=saved.tasks||DEFAULT_TASKS;
-  tasks.forEach(t=>{
-    if(!t.tags)t.tags=[];
-    if(!t.recur)t.recur='';
-    if(!t.elapsed)t.elapsed=0;
-    if(!t.subtasks)t.subtasks=[];
-    if(!t.energy)t.energy='med';
-    if(!t.createdAt)t.createdAt=todayStr;
-    if(!t.est)t.est='';
-  });
-  completedDays=new Set(saved.completedDays||[]);
-  completionLog=saved.completionLog||{};nextId=saved.nextId||11;totalElapsed=saved.totalElapsed||0;
-  darkMode=false; // Always start in light mode — user can toggle
-}else{tasks=DEFAULT_TASKS;completedDays=new Set();completionLog={};nextId=11;totalElapsed=0;darkMode=false;}
+// ── Shared state (synced via Firebase) ─────────────────
+let tasks = DEFAULT_TASKS;
+let completedDays = new Set();
+let completionLog = {};
+let nextId = 11;
+let totalElapsed = 0;
+let darkMode = false;
+let appReady = false;
 
-if(darkMode)applyTheme(true);
+function normalizeTasks(arr){
+  return (arr||[]).map(t=>({
+    ...t,
+    tags: t.tags||[],
+    recur: t.recur||'',
+    elapsed: t.elapsed||0,
+    subtasks: t.subtasks||[],
+    energy: t.energy||'med',
+    createdAt: t.createdAt||todayStr,
+    est: t.est||'',
+  }));
+}
+
+function setSyncStatus(status){
+  const dot=document.getElementById('syncDot');
+  const lbl=document.getElementById('syncLabel');
+  if(!dot||!lbl)return;
+  dot.className='sync-dot'+(status==='syncing'?' syncing':status==='error'?' error':'');
+  lbl.textContent=status==='syncing'?'Syncing...':status==='error'?'Offline':'Synced';
+}
+
+function save(){
+  setSyncStatus('syncing');
+  const data={tasks,completedDays:[...completedDays],completionLog,nextId,totalElapsed,parkedTasks,_savedBy:CLIENT_ID,_savedAt:Date.now()};
+  dbRef.set(data).then(()=>setSyncStatus('synced')).catch(()=>setSyncStatus('error'));
+  try{localStorage.setItem('todo_v9_backup',JSON.stringify(data));}catch(e){}
+}
+
+// ── Real-time listener ────────────────────────────────
+dbRef.on('value', snapshot => {
+  const data=snapshot.val();
+  if(!data){
+    if(!appReady){appReady=true;save();applyTheme(false);render();renderParking();setSyncStatus('synced');}
+    return;
+  }
+  if(data._savedBy===CLIENT_ID&&appReady){setSyncStatus('synced');return;}
+  tasks=normalizeTasks(data.tasks);
+  completedDays=new Set(data.completedDays||[]);
+  completionLog=data.completionLog||{};
+  nextId=data.nextId||11;
+  totalElapsed=data.totalElapsed||0;
+  if(data.parkedTasks)parkedTasks=data.parkedTasks;
+  if(!appReady){appReady=true;applyTheme(false);}
+  else showToast('📲 List updated');
+  render();renderParking();setSyncStatus('synced');
+}, err=>{
+  setSyncStatus('error');
+  if(!appReady){
+    appReady=true;
+    try{const b=localStorage.getItem('todo_v9_backup');if(b){const d=JSON.parse(b);tasks=normalizeTasks(d.tasks);completedDays=new Set(d.completedDays||[]);completionLog=d.completionLog||{};nextId=d.nextId||11;totalElapsed=d.totalElapsed||0;if(d.parkedTasks)parkedTasks=d.parkedTasks;}}catch(e){}
+    applyTheme(false);render();renderParking();
+  }
+});
+// ──────────────────────────────────────────────────────
+
 else applyTheme(false);
 function applyTheme(dark){
   const root = document.documentElement;
