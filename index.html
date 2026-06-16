@@ -629,6 +629,40 @@ function loadState(){try{const r=localStorage.getItem('todo_v9');if(r)return JSO
 function save(){try{localStorage.setItem('todo_v9',JSON.stringify({tasks,completedDays:[...completedDays],completionLog,nextId,totalElapsed,darkMode}));}catch(e){}}
 
 let tasks,completedDays,completionLog,nextId,totalElapsed,darkMode;
+let completedHistory = [];  // permanent log of completed tasks
+
+// ── User identity (must be defined before any render) ──
+let MY_NAME = localStorage.getItem('todo_user_name') || '';
+function getUserColor(name){
+  if(!name) return '#9490B2';
+  const palette = ['#5533E8','#0E9488','#C0341F','#B86200','#7C3AED','#0369A1'];
+  let hash=0; for(let i=0;i<name.length;i++) hash=name.charCodeAt(i)+((hash<<5)-hash);
+  return palette[Math.abs(hash)%palette.length];
+}
+function promptForName(){
+  const name = prompt("What's your name? (so tasks show who added them)");
+  if(name && name.trim()){
+    MY_NAME = name.trim();
+    localStorage.setItem('todo_user_name', MY_NAME);
+    render();
+  }
+}
+function getKnownUsers(){
+  const names = new Set();
+  if(MY_NAME) names.add(MY_NAME);
+  tasks.forEach(t=>{ if(t.owner) names.add(t.owner); if(t.assignee) names.add(t.assignee); });
+  return [...names];
+}
+function refreshAssignDropdown(){
+  const sel = document.getElementById('qaAssign');
+  if(!sel) return;
+  const current = sel.value;
+  const users = getKnownUsers();
+  sel.innerHTML = '<option value="">👤 Anyone</option>' +
+    users.map(u=>`<option value="${u}">For ${u}</option>`).join('');
+  if(current && users.includes(current)) sel.value = current;
+}
+
 const saved=loadState();
 if(saved){
   tasks=saved.tasks||DEFAULT_TASKS;
@@ -643,8 +677,9 @@ if(saved){
   });
   completedDays=new Set(saved.completedDays||[]);
   completionLog=saved.completionLog||{};nextId=saved.nextId||11;totalElapsed=saved.totalElapsed||0;
+  completedHistory=saved.completedHistory||[];
   darkMode=false; // Always start in light mode — user can toggle
-}else{tasks=DEFAULT_TASKS;completedDays=new Set();completionLog={};nextId=11;totalElapsed=0;darkMode=false;}
+}else{tasks=DEFAULT_TASKS;completedDays=new Set();completionLog={};nextId=11;totalElapsed=0;completedHistory=[];darkMode=false;}
 
 if(darkMode)applyTheme(true);
 else applyTheme(false);
@@ -1640,7 +1675,6 @@ function makeTask(t,isFocus,rank){
 // ── Parking lot ──────────────────────────────────
 let parkedTasks = [];
 let parkingOpen = false;
-let completedHistory = [];  // permanent log of completed tasks
 
 function loadParked(){
   try{ const r=localStorage.getItem('parked_v9'); if(r) parkedTasks=JSON.parse(r); }catch(e){}
@@ -1721,45 +1755,9 @@ const DB_URL = 'https://my-todos-c62fd-default-rtdb.firebaseio.com/household';
 let CLIENT_ID = localStorage.getItem('todo_client_id');
 if(!CLIENT_ID){ CLIENT_ID = Math.random().toString(36).substr(2,9); localStorage.setItem('todo_client_id',CLIENT_ID); }
 
-// ── User identity ────────────────────────────────────
-let MY_NAME = localStorage.getItem('todo_user_name') || '';
-const USER_COLORS = {
-  // assigned by name — first user gets indigo, second gets teal
-};
-function getUserColor(name){
-  if(!name) return '#9490B2';
-  // Deterministic color from name
-  const palette = ['#5533E8','#0E9488','#C0341F','#B86200','#7C3AED','#0369A1'];
-  let hash=0; for(let i=0;i<name.length;i++) hash=name.charCodeAt(i)+((hash<<5)-hash);
-  return palette[Math.abs(hash)%palette.length];
-}
-function promptForName(){
-  const name = prompt('What\'s your name? (so tasks show who added them)');
-  if(name && name.trim()){
-    MY_NAME = name.trim();
-    localStorage.setItem('todo_user_name', MY_NAME);
-    render();
-  }
-}
 // Ask for name on first visit
 if(!MY_NAME){ setTimeout(promptForName, 800); }
 
-// ── Known users (learned from tasks + this device) ───
-function getKnownUsers(){
-  const names = new Set();
-  if(MY_NAME) names.add(MY_NAME);
-  tasks.forEach(t=>{ if(t.owner) names.add(t.owner); if(t.assignee) names.add(t.assignee); });
-  return [...names];
-}
-function refreshAssignDropdown(){
-  const sel = document.getElementById('qaAssign');
-  if(!sel) return;
-  const current = sel.value;
-  const users = getKnownUsers();
-  sel.innerHTML = '<option value="">👤 Anyone</option>' +
-    users.map(u=>`<option value="${u}">For ${u}</option>`).join('');
-  if(current && users.includes(current)) sel.value = current;
-}
 let isSaving = false;
 let lastAppliedAt = 0;
 let ourSaveTime = 0;
