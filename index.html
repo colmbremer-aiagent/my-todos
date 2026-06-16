@@ -939,8 +939,9 @@ function toggle(id){
     t.completedAt = todayStr;
     completedDays.add(todayStr);
     completionLog[todayStr]=(completionLog[todayStr]||0)+1;
-    // Log to permanent history
-    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',owner:t.owner||'',assignee:t.assignee||'',completedAt:todayStr,completedTs:Date.now()});
+    // Log to permanent history — credit current user if task has no owner/assignee
+    const completedBy = t.assignee || t.owner || MY_NAME || '';
+    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',owner:t.owner||MY_NAME||'',assignee:t.assignee||'',completedBy:completedBy,completedAt:todayStr,completedTs:Date.now()});
     if(completedHistory.length>500) completedHistory=completedHistory.slice(0,500);
     if(t.recur){
       // Build the rescheduled copy
@@ -1029,25 +1030,28 @@ function renderHistory(){
 
   // ── Weekly leaderboard per person ──
   const weekAgo = Date.now() - 7*86400000;
+  const sevenDaysAgoStr = new Date(weekAgo).toISOString().split('T')[0];
   const personCounts = {};
   done.forEach(t=>{
-    // Use completedTs if available, else fall back to completedAt date
-    let ts = t.completedTs;
-    if(!ts && t.completedAt){ ts = new Date(t.completedAt).getTime(); }
-    if(!ts || ts < weekAgo) return;
-    // Credit goes to whoever completed it — assignee if assigned, else owner
-    const who = t.assignee || t.owner || 'Unassigned';
+    // Determine if completed within the last 7 days
+    let inWeek = false;
+    if(t.completedTs && t.completedTs >= weekAgo) inWeek = true;
+    else if(t.completedAt && t.completedAt >= sevenDaysAgoStr) inWeek = true;
+    else if(!t.completedTs && !t.completedAt) inWeek = true; // no date info — count it
+    if(!inWeek) return;
+    const who = t.completedBy || t.assignee || t.owner || '';
+    if(!who) return; // only count tasks with a name attached
     personCounts[who] = (personCounts[who]||0) + 1;
   });
   const ranked = Object.entries(personCounts).sort((a,b)=>b[1]-a[1]);
   const lb = document.getElementById('historyLeaderboard');
-  if(ranked.length >= 1 && ranked.some(([n])=>n!=='Unassigned')){
+  if(ranked.length >= 1){
     const maxCount = ranked[0][1] || 1;
     const medals = ['🥇','🥈','🥉'];
     lb.innerHTML = `
       <div style="font-size:13px;font-weight:800;color:var(--tx2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">🏆 This week's leaderboard</div>
       ${ranked.map(([name,count],i)=>{
-        const color = name==='Unassigned' ? 'var(--tx3)' : getUserColor(name);
+        const color = getUserColor(name);
         const pct = Math.round((count/maxCount)*100);
         return `
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
@@ -1061,7 +1065,7 @@ function renderHistory(){
       }).join('')}
     `;
   } else {
-    lb.innerHTML = '';
+    lb.innerHTML = '<div style="font-size:12px;color:var(--tx3);text-align:center;padding:12px;background:var(--bg3);border-radius:12px;">🏆 Complete tasks with a name set to build the weekly leaderboard</div>';
   }
 
   const list = document.getElementById('historyList');
@@ -1195,7 +1199,7 @@ function bulkComplete(){
     t.completedAt=todayStr;
     completedDays.add(todayStr);
     completionLog[todayStr]=(completionLog[todayStr]||0)+1;
-    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',owner:t.owner||'',assignee:t.assignee||'',completedAt:todayStr,completedTs:Date.now()});
+    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',owner:t.owner||MY_NAME||'',assignee:t.assignee||'',completedBy:(t.assignee||t.owner||MY_NAME||''),completedAt:todayStr,completedTs:Date.now()});
   });
   if(completedHistory.length>500) completedHistory=completedHistory.slice(0,500);
   const n=selectedIds.size;
