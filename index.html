@@ -1677,114 +1677,94 @@ renderParking();
 
 render();
 
-// ── Firebase real-time sync (additive layer) ─────────
+// ── Firebase real-time sync ──────────────────────────
 const DB_URL = 'https://my-todos-c62fd-default-rtdb.firebaseio.com/household';
-// Stable client ID — persists across page reloads
 let CLIENT_ID = localStorage.getItem('todo_client_id');
-if(!CLIENT_ID){ CLIENT_ID = Math.random().toString(36).substr(2,9); localStorage.setItem('todo_client_id', CLIENT_ID); }
-let lastSyncAt = 0;
-let ourSaveTime = 0;  // track when WE last saved
+if(!CLIENT_ID){ CLIENT_ID = Math.random().toString(36).substr(2,9); localStorage.setItem('todo_client_id',CLIENT_ID); }
 let isSaving = false;
+let lastAppliedAt = 0;
+let ourSaveTime = 0;
 
-function setSyncUI(status){
+function setSyncUI(s){
   const dot=document.getElementById('syncDot');
   const lbl=document.getElementById('syncLabel');
-  if(dot) dot.style.background = status==='synced'?'#1A7A48':status==='error'?'#C0341F':'#B86200';
-  if(lbl) lbl.textContent = status==='synced'?'Synced':status==='error'?'Offline':'Saving...';
+  if(dot) dot.style.background=s==='synced'?'#1A7A48':s==='saving'?'#B86200':'#C0341F';
+  if(lbl) lbl.textContent=s==='synced'?'Synced':s==='saving'?'Saving...':'Offline';
 }
 
 function syncSave(){
-  isSaving = true;
-  ourSaveTime = Date.now();
-  const saveTimestamp = ourSaveTime;
-  const data = {
-    tasks, completedDays:[...completedDays], completionLog,
-    nextId, totalElapsed, parkedTasks,
-    _by: CLIENT_ID, _at: saveTimestamp
-  };
-  fetch(DB_URL+'.json', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
-    .then(r=>{ 
-      isSaving = false;
-      lastSyncAt = saveTimestamp;
-      setSyncUI(r.ok ? 'synced' : 'error');
+  isSaving=true;
+  setSyncUI('saving');
+  ourSaveTime=Date.now();
+  const ts=ourSaveTime;
+  const data={tasks,completedDays:[...completedDays],completionLog,nextId,totalElapsed,parkedTasks,_by:CLIENT_ID,_at:ts};
+  fetch(DB_URL+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+    .then(r=>{
+      isSaving=false;
+      lastAppliedAt=ts;
+      setSyncUI(r.ok?'synced':'error');
     })
     .catch(()=>{ isSaving=false; setSyncUI('error'); });
+  // Keep local backup
+  try{localStorage.setItem('todo_v9',JSON.stringify(data));}catch(e){}
+}
+
+function applyFirebaseData(data){
+  if(data.tasks) tasks=data.tasks;
+  if(data.completedDays) completedDays=new Set(data.completedDays);
+  if(data.completionLog) completionLog=data.completionLog;
+  if(data.nextId) nextId=data.nextId;
+  if(data.totalElapsed) totalElapsed=data.totalElapsed;
+  if(data.parkedTasks) parkedTasks=data.parkedTasks;
+  lastAppliedAt=data._at||Date.now();
+  try{localStorage.setItem('todo_v9',JSON.stringify(data));}catch(e){}
+  render(); renderParking();
 }
 
 function syncPoll(){
-  // Don't poll while we're in the middle of saving
   if(isSaving) return;
   fetch(DB_URL+'.json')
     .then(r=>r.json())
     .then(data=>{
       if(!data){ setSyncUI('synced'); return; }
-      // Skip if this is our own save
-      if(data._by===CLIENT_ID){ setSyncUI('synced'); return; }
-      // Skip if Firebase data is older than our last save
-      if(data._at && data._at < ourSaveTime){ setSyncUI('synced'); return; }
-      // Skip if we've already seen this update
-      if(data._at && data._at <= lastSyncAt){ setSyncUI('synced'); return; }
-      // This is a genuine update from the other user
-      lastSyncAt = data._at||0;
-      if(data.tasks) tasks = data.tasks;
-      if(data.completedDays) completedDays = new Set(data.completedDays);
-      if(data.completionLog) completionLog = data.completionLog;
-      if(data.nextId) nextId = data.nextId;
-      if(data.totalElapsed) totalElapsed = data.totalElapsed;
-      if(data.parkedTasks) parkedTasks = data.parkedTasks;
-      render(); renderParking();
-      showToast('📲 List updated');
+      // Skip if this data is older than what we've already applied
+      if((data._at||0) <= lastAppliedAt){ setSyncUI('synced'); return; }
+      // This is newer data from Firebase — apply it
+      applyFirebaseData(data);
+      if(data._by!==CLIENT_ID) showToast('📲 List updated');
       setSyncUI('synced');
     })
     .catch(()=>setSyncUI('error'));
 }
 
-// Patch save() to also sync to Firebase
-const _origSave = save;
-window.save = function(){
-  _origSave();
-  syncSave();
-};
-save = window.save;
+// Patch save() to also push to Firebase
+const _origSave=save;
+window.save=function(){ _origSave(); syncSave(); };
+save=window.save;
 
-// On first load:
-// - New device (no localStorage) → PULL from Firebase first
-// - Returning device (has localStorage) → PUSH to Firebase first
-const isNewDevice = !localStorage.getItem('todo_v9');
-
+// On load: ALWAYS pull from Firebase first
+// If Firebase has data, use it. If empty, push ours up.
 setTimeout(()=>{
-  if(isNewDevice){
-    // Pull from Firebase and use as source of truth
-    fetch(DB_URL+'.json')
-      .then(r=>r.json())
-      .then(data=>{
-        if(data && data.tasks && data.tasks.length > 0){
-          // Firebase has real data — use it
-          tasks = data.tasks;
-          if(data.completedDays) completedDays = new Set(data.completedDays);
-          if(data.completionLog) completionLog = data.completionLog;
-          if(data.nextId) nextId = data.nextId;
-          if(data.totalElapsed) totalElapsed = data.totalElapsed;
-          if(data.parkedTasks) parkedTasks = data.parkedTasks;
-          lastSyncAt = data._at||0;
-          ourSaveTime = data._at||0;
-          // Save to localStorage so we're no longer "new"
-          try{localStorage.setItem('todo_v9', JSON.stringify({tasks,completedDays:[...completedDays],completionLog,nextId,totalElapsed}));}catch(e){}
-          render(); renderParking();
-          setSyncUI('synced');
-        } else {
-          // Firebase is empty — push our defaults up
-          syncSave();
-        }
-        setTimeout(()=>setInterval(syncPoll, 4000), 3000);
-      })
-      .catch(()=>{ syncSave(); setTimeout(()=>setInterval(syncPoll,4000),3000); });
-  } else {
-    // Returning device — push our data, then poll
-    syncSave();
-    setTimeout(()=>setInterval(syncPoll, 4000), 3000);
-  }
-}, 500);
+  fetch(DB_URL+'.json')
+    .then(r=>r.json())
+    .then(data=>{
+      if(data && data._at && data.tasks && data.tasks.length>0){
+        // Firebase has data — use it as source of truth
+        applyFirebaseData(data);
+        setSyncUI('synced');
+      } else {
+        // Firebase is empty — push our local data up
+        syncSave();
+      }
+      // Start polling every 4 seconds
+      setInterval(syncPoll,4000);
+    })
+    .catch(()=>{
+      // Can't reach Firebase — use localStorage, try again later
+      setSyncUI('error');
+      setInterval(syncPoll,4000);
+    });
+},500);
 // ─────────────────────────────────────────────────────
 </script>
 </body>
