@@ -473,6 +473,7 @@ body{
       <button onclick="closeHistory()" style="width:38px;height:38px;border-radius:12px;border:1px solid var(--br2);background:var(--bg2);color:var(--tx2);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;">✕</button>
     </div>
     <div id="historyStats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1.5rem;"></div>
+    <div id="historyLeaderboard" style="margin-bottom:1.5rem;"></div>
     <div id="historyList"></div>
   </div>
 </div>
@@ -1025,6 +1026,43 @@ function renderHistory(){
     <div class="history-stat"><div class="h-val">${weekDone}</div><div class="h-lbl">This week</div></div>
     <div class="history-stat"><div class="h-val">${topCat?CAT_META[topCat[0]]?.label||topCat[0]:'—'}</div><div class="h-lbl">Top area</div></div>
   `;
+
+  // ── Weekly leaderboard per person ──
+  const weekAgo = Date.now() - 7*86400000;
+  const personCounts = {};
+  done.forEach(t=>{
+    // Use completedTs if available, else fall back to completedAt date
+    let ts = t.completedTs;
+    if(!ts && t.completedAt){ ts = new Date(t.completedAt).getTime(); }
+    if(!ts || ts < weekAgo) return;
+    // Credit goes to whoever completed it — assignee if assigned, else owner
+    const who = t.assignee || t.owner || 'Unassigned';
+    personCounts[who] = (personCounts[who]||0) + 1;
+  });
+  const ranked = Object.entries(personCounts).sort((a,b)=>b[1]-a[1]);
+  const lb = document.getElementById('historyLeaderboard');
+  if(ranked.length >= 1 && ranked.some(([n])=>n!=='Unassigned')){
+    const maxCount = ranked[0][1] || 1;
+    const medals = ['🥇','🥈','🥉'];
+    lb.innerHTML = `
+      <div style="font-size:13px;font-weight:800;color:var(--tx2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">🏆 This week's leaderboard</div>
+      ${ranked.map(([name,count],i)=>{
+        const color = name==='Unassigned' ? 'var(--tx3)' : getUserColor(name);
+        const pct = Math.round((count/maxCount)*100);
+        return `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div style="font-size:16px;width:24px;flex-shrink:0;">${medals[i]||'·'}</div>
+          <div style="font-weight:700;font-size:13px;color:${color};width:80px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</div>
+          <div style="flex:1;height:18px;background:var(--bg3);border-radius:10px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${color};border-radius:10px;transition:width 0.4s;"></div>
+          </div>
+          <div style="font-weight:800;font-size:14px;color:${color};width:28px;text-align:right;flex-shrink:0;">${count}</div>
+        </div>`;
+      }).join('')}
+    `;
+  } else {
+    lb.innerHTML = '';
+  }
 
   const list = document.getElementById('historyList');
   if(!done.length){
