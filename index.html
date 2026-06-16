@@ -456,7 +456,8 @@ body{
     <button class="icon-btn" onclick="confirmDailyReset()" aria-label="Daily reset" title="Daily reset">🌅</button>
 
     <button class="icon-btn" onclick="openHistory()" aria-label="History" title="Completion history">📋</button>
-    <div class="sync-label"><div class="sync-dot" id="syncDot"></div><span id="syncLabel">Connecting...</span></div>
+    <div style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:var(--tx3);"><div id="syncDot" style="width:8px;height:8px;border-radius:50%;background:var(--amber);"></div><span id="syncLabel">Sync off</span></div>
+
   </div>
 </div>
 
@@ -595,21 +596,10 @@ body{
 <div class="toast" id="toast"></div>
 
 <script>
-// Show any JS errors visibly on screen
-window.onerror = function(msg, src, line, col, err){
-  const div = document.createElement('div');
-  div.style.cssText = 'background:#C0392B;color:#fff;padding:16px;font-size:13px;position:fixed;top:0;left:0;right:0;z-index:99999;font-family:monospace;';
-  div.textContent = 'JS ERROR line ' + line + ': ' + msg;
-  document.body.appendChild(div);
-};
-// Safety shim
+// Safety shim — sendPrompt only exists inside Claude artifacts, not standalone HTML
 if(typeof sendPrompt === 'undefined') window.sendPrompt = null;
-
-// ── Firebase REST config ─────────────────────────────
-const DB_URL = 'https://my-todos-c62fd-default-rtdb.firebaseio.com/household';
-const CLIENT_ID = Math.random().toString(36).substr(2, 9);
-// ─────────────────────────────────────────────────────
-
+// Clear any stale theme setting from localStorage
+try{ const s=localStorage.getItem('todo_v9'); if(s){const p=JSON.parse(s);if(p.darkMode!==undefined){delete p.darkMode;localStorage.setItem('todo_v9',JSON.stringify(p));}} }catch(e){}
 
 const todayStr=new Date().toISOString().split('T')[0];
 document.getElementById('qaDate').min=todayStr;
@@ -632,93 +622,28 @@ const DEFAULT_TASKS=[
   {id:10,title:'Fold a load of laundry',cat:'home',due:null,pri:'low',energy:'low-e',note:'',tags:[],recur:'',subtasks:[],urgent:false,done:false,elapsed:0,est:'15m',createdAt:todayStr},
 ];
 
+function loadState(){try{const r=localStorage.getItem('todo_v9');if(r)return JSON.parse(r);}catch(e){}return null;}
+function save(){try{localStorage.setItem('todo_v9',JSON.stringify({tasks,completedDays:[...completedDays],completionLog,nextId,totalElapsed,darkMode}));}catch(e){}}
 
-// ── Shared state (synced via Firebase) ─────────────────
-let tasks = DEFAULT_TASKS;
-let completedDays = new Set();
-let completionLog = {};
-let nextId = 11;
-let totalElapsed = 0;
-let darkMode = false;
-let appReady = false;
-let parkedTasks = [];
-let parkingOpen = false;
+let tasks,completedDays,completionLog,nextId,totalElapsed,darkMode;
+const saved=loadState();
+if(saved){
+  tasks=saved.tasks||DEFAULT_TASKS;
+  tasks.forEach(t=>{
+    if(!t.tags)t.tags=[];
+    if(!t.recur)t.recur='';
+    if(!t.elapsed)t.elapsed=0;
+    if(!t.subtasks)t.subtasks=[];
+    if(!t.energy)t.energy='med';
+    if(!t.createdAt)t.createdAt=todayStr;
+    if(!t.est)t.est='';
+  });
+  completedDays=new Set(saved.completedDays||[]);
+  completionLog=saved.completionLog||{};nextId=saved.nextId||11;totalElapsed=saved.totalElapsed||0;
+  darkMode=false; // Always start in light mode — user can toggle
+}else{tasks=DEFAULT_TASKS;completedDays=new Set();completionLog={};nextId=11;totalElapsed=0;darkMode=false;}
 
-function normalizeTasks(arr){
-  return (arr||[]).map(t=>({
-    ...t,
-    tags: t.tags||[],
-    recur: t.recur||'',
-    elapsed: t.elapsed||0,
-    subtasks: t.subtasks||[],
-    energy: t.energy||'med',
-    createdAt: t.createdAt||todayStr,
-    est: t.est||'',
-  }));
-}
-
-function setSyncStatus(status){
-  const dot=document.getElementById('syncDot');
-  const lbl=document.getElementById('syncLabel');
-  if(!dot||!lbl)return;
-  dot.className='sync-dot'+(status==='syncing'?' syncing':status==='error'?' error':'');
-  lbl.textContent=status==='syncing'?'Syncing...':status==='error'?'Offline':'Synced';
-}
-
-// ── Save to Firebase ─────────────────────────────────
-function save(){
-  setSyncStatus('syncing');
-  const data={tasks,completedDays:[...completedDays],completionLog,nextId,totalElapsed,parkedTasks,_savedBy:CLIENT_ID,_savedAt:Date.now()};
-  fetch(DB_URL+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
-    .then(r=>{ if(r.ok) setSyncStatus('synced'); else setSyncStatus('error'); })
-    .catch(()=>setSyncStatus('error'));
-  try{localStorage.setItem('todo_v9_backup',JSON.stringify(data));}catch(e){}
-}
-
-// ── Load from Firebase ───────────────────────────────
-let lastSavedAt = 0;
-async function loadFromFirebase(){
-  try{
-    setSyncStatus('syncing');
-    const r = await fetch(DB_URL+'.json');
-    if(!r.ok){ setSyncStatus('error'); return; }
-    const data = await r.json();
-    setSyncStatus('synced');
-    if(!data){
-      // No data in Firebase yet — push our defaults up
-      save();
-      return;
-    }
-    // Skip if this is our own save
-    if(data._savedAt && data._savedAt <= lastSavedAt && appReady) return;
-    if(data._savedBy===CLIENT_ID && appReady){ lastSavedAt=data._savedAt||0; return; }
-    lastSavedAt = data._savedAt||0;
-    tasks=normalizeTasks(data.tasks);
-    completedDays=new Set(data.completedDays||[]);
-    completionLog=data.completionLog||{};
-    nextId=data.nextId||11;
-    totalElapsed=data.totalElapsed||0;
-    if(data.parkedTasks) parkedTasks=data.parkedTasks;
-    showToast('📲 Synced');
-    render(); renderParking();
-  }catch(e){
-    setSyncStatus('error');
-    // Fall back to local backup if available
-    try{const b=localStorage.getItem('todo_v9_backup');if(b){const d=JSON.parse(b);tasks=normalizeTasks(d.tasks);completedDays=new Set(d.completedDays||[]);completionLog=d.completionLog||{};nextId=d.nextId||11;totalElapsed=d.totalElapsed||0;if(d.parkedTasks)parkedTasks=d.parkedTasks;render();renderParking();}}catch(ex){}
-  }
-}
-
-// ── Render immediately with defaults, Firebase will update ──
-applyTheme(false);
-render();
-renderParking();
-appReady = true;
-
-// ── Then sync with Firebase ──────────────────────────
-loadFromFirebase();
-setInterval(loadFromFirebase, 3000);
-// ─────────────────────────────────────────────────────
-
+if(darkMode)applyTheme(true);
 else applyTheme(false);
 function applyTheme(dark){
   const root = document.documentElement;
@@ -1675,6 +1600,8 @@ function makeTask(t,isFocus,rank){
 }
 
 // ── Parking lot ──────────────────────────────────
+let parkedTasks = [];
+let parkingOpen = false;
 
 function loadParked(){
   try{ const r=localStorage.getItem('parked_v9'); if(r) parkedTasks=JSON.parse(r); }catch(e){}
@@ -1749,6 +1676,70 @@ function renderParking(){
 renderParking();
 
 render();
+
+// ── Firebase real-time sync (additive layer) ─────────
+const DB_URL = 'https://my-todos-c62fd-default-rtdb.firebaseio.com/household';
+const CLIENT_ID = Math.random().toString(36).substr(2,9);
+let lastSyncAt = 0;
+
+function syncSave(){
+  const data = {
+    tasks, completedDays:[...completedDays], completionLog,
+    nextId, totalElapsed, parkedTasks,
+    _by: CLIENT_ID, _at: Date.now()
+  };
+  fetch(DB_URL+'.json', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
+    .then(r=>{ 
+      const dot=document.getElementById('syncDot');
+      if(dot) dot.style.background = r.ok ? '#1A7A48' : '#C0341F';
+      const lbl=document.getElementById('syncLabel');
+      if(lbl) lbl.textContent = r.ok ? 'Synced' : 'Error';
+    })
+    .catch(()=>{ 
+      const dot=document.getElementById('syncDot'); if(dot) dot.style.background='#C0341F';
+      const lbl=document.getElementById('syncLabel'); if(lbl) lbl.textContent='Offline';
+    });
+}
+
+function syncPoll(){
+  fetch(DB_URL+'.json')
+    .then(r=>r.json())
+    .then(data=>{
+      const dot=document.getElementById('syncDot');
+      const lbl=document.getElementById('syncLabel');
+      if(!data){ if(dot) dot.style.background='#1A7A48'; if(lbl) lbl.textContent='Synced'; return; }
+      if(data._by===CLIENT_ID){ if(dot) dot.style.background='#1A7A48'; if(lbl) lbl.textContent='Synced'; return; }
+      if(data._at && data._at <= lastSyncAt){ return; }
+      lastSyncAt = data._at||0;
+      // Update from other user
+      if(data.tasks) tasks = data.tasks;
+      if(data.completedDays) completedDays = new Set(data.completedDays);
+      if(data.completionLog) completionLog = data.completionLog;
+      if(data.nextId) nextId = data.nextId;
+      if(data.totalElapsed) totalElapsed = data.totalElapsed;
+      if(data.parkedTasks) parkedTasks = data.parkedTasks;
+      render(); renderParking();
+      showToast('📲 List updated');
+      if(dot) dot.style.background='#1A7A48'; if(lbl) lbl.textContent='Synced';
+    })
+    .catch(()=>{
+      const dot=document.getElementById('syncDot'); if(dot) dot.style.background='#C0341F';
+      const lbl=document.getElementById('syncLabel'); if(lbl) lbl.textContent='Offline';
+    });
+}
+
+// Patch save() to also sync to Firebase
+const _origSave = save;
+window.save = function(){
+  _origSave();
+  syncSave();
+};
+save = window.save;
+
+// Initial load from Firebase, then poll every 4 seconds
+setTimeout(syncPoll, 1000);
+setInterval(syncPoll, 4000);
+// ─────────────────────────────────────────────────────
 </script>
 </body>
 </html>
