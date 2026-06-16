@@ -643,6 +643,8 @@ let nextId = 11;
 let totalElapsed = 0;
 let darkMode = false;
 let appReady = false;
+let parkedTasks = [];
+let parkingOpen = false;
 
 function normalizeTasks(arr){
   return (arr||[]).map(t=>({
@@ -1655,8 +1657,6 @@ function makeTask(t,isFocus,rank){
 }
 
 // ── Parking lot ──────────────────────────────────
-let parkedTasks = [];
-let parkingOpen = false;
 
 function loadParked(){
   try{ const r=localStorage.getItem('parked_v9'); if(r) parkedTasks=JSON.parse(r); }catch(e){}
