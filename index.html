@@ -658,55 +658,57 @@ function setSyncStatus(status){
   lbl.textContent=status==='syncing'?'Syncing...':status==='error'?'Offline':'Synced';
 }
 
-// ── Save to Firebase REST API ─────────────────────────
+// ── Save to Firebase ─────────────────────────────────
 function save(){
   setSyncStatus('syncing');
   const data={tasks,completedDays:[...completedDays],completionLog,nextId,totalElapsed,parkedTasks,_savedBy:CLIENT_ID,_savedAt:Date.now()};
   fetch(DB_URL+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
-    .then(r=>r.ok?setSyncStatus('synced'):setSyncStatus('error'))
+    .then(r=>{ if(r.ok) setSyncStatus('synced'); else setSyncStatus('error'); })
     .catch(()=>setSyncStatus('error'));
   try{localStorage.setItem('todo_v9_backup',JSON.stringify(data));}catch(e){}
 }
 
-// ── Real-time listener via SSE ────────────────────────
-function startListening(){
-  const evtSource = new EventSource(DB_URL+'.json');
-  evtSource.addEventListener('put', e=>{
-    try{
-      const update = JSON.parse(e.data);
-      const data = update.data;
-      if(!data){
-        if(!appReady){appReady=true;save();applyTheme(false);render();renderParking();}
-        return;
-      }
-      if(data._savedBy===CLIENT_ID&&appReady){setSyncStatus('synced');return;}
-      tasks=normalizeTasks(data.tasks);
-      completedDays=new Set(data.completedDays||[]);
-      completionLog=data.completionLog||{};
-      nextId=data.nextId||11;
-      totalElapsed=data.totalElapsed||0;
-      if(data.parkedTasks)parkedTasks=data.parkedTasks;
-      if(!appReady){appReady=true;applyTheme(false);}
-      else showToast('📲 List updated');
-      render();renderParking();setSyncStatus('synced');
-    }catch(err){console.error('Parse error:',err);}
-  });
-  evtSource.addEventListener('cancel', ()=>{
+// ── Load from Firebase ───────────────────────────────
+let lastSavedAt = 0;
+async function loadFromFirebase(){
+  try{
+    setSyncStatus('syncing');
+    const r = await fetch(DB_URL+'.json');
+    if(!r.ok){ setSyncStatus('error'); return; }
+    const data = await r.json();
+    setSyncStatus('synced');
+    if(!data){
+      // No data yet — push defaults
+      if(!appReady){ appReady=true; applyTheme(false); render(); renderParking(); save(); }
+      return;
+    }
+    // Skip if this is our own save
+    if(data._savedAt && data._savedAt <= lastSavedAt && appReady) return;
+    if(data._savedBy===CLIENT_ID && appReady){ lastSavedAt=data._savedAt||0; return; }
+    lastSavedAt = data._savedAt||0;
+    tasks=normalizeTasks(data.tasks);
+    completedDays=new Set(data.completedDays||[]);
+    completionLog=data.completionLog||{};
+    nextId=data.nextId||11;
+    totalElapsed=data.totalElapsed||0;
+    if(data.parkedTasks) parkedTasks=data.parkedTasks;
+    if(!appReady){ appReady=true; applyTheme(false); }
+    else showToast('📲 List updated');
+    render(); renderParking();
+  }catch(e){
     setSyncStatus('error');
-    evtSource.close();
-    setTimeout(startListening, 3000); // reconnect after 3s
-  });
-  evtSource.onerror = ()=>{
-    setSyncStatus('error');
+    // Fall back to local on first load
     if(!appReady){
       appReady=true;
-      try{const b=localStorage.getItem('todo_v9_backup');if(b){const d=JSON.parse(b);tasks=normalizeTasks(d.tasks);completedDays=new Set(d.completedDays||[]);completionLog=d.completionLog||{};nextId=d.nextId||11;totalElapsed=d.totalElapsed||0;if(d.parkedTasks)parkedTasks=d.parkedTasks;}}catch(e){}
-      applyTheme(false);render();renderParking();
+      try{const b=localStorage.getItem('todo_v9_backup');if(b){const d=JSON.parse(b);tasks=normalizeTasks(d.tasks);completedDays=new Set(d.completedDays||[]);completionLog=d.completionLog||{};nextId=d.nextId||11;totalElapsed=d.totalElapsed||0;if(d.parkedTasks)parkedTasks=d.parkedTasks;}}catch(ex){}
+      applyTheme(false); render(); renderParking();
     }
-  };
-  evtSource.onopen = ()=>setSyncStatus('syncing');
+  }
 }
-startListening();
+
+// Load immediately then poll every 3 seconds
+loadFromFirebase();
+setInterval(loadFromFirebase, 3000);
 // ─────────────────────────────────────────────────────
 
 else applyTheme(false);
