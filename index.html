@@ -1681,37 +1681,49 @@ render();
 const DB_URL = 'https://my-todos-c62fd-default-rtdb.firebaseio.com/household';
 const CLIENT_ID = Math.random().toString(36).substr(2,9);
 let lastSyncAt = 0;
+let ourSaveTime = 0;  // track when WE last saved
+let isSaving = false;
+
+function setSyncUI(status){
+  const dot=document.getElementById('syncDot');
+  const lbl=document.getElementById('syncLabel');
+  if(dot) dot.style.background = status==='synced'?'#1A7A48':status==='error'?'#C0341F':'#B86200';
+  if(lbl) lbl.textContent = status==='synced'?'Synced':status==='error'?'Offline':'Saving...';
+}
 
 function syncSave(){
+  isSaving = true;
+  ourSaveTime = Date.now();
+  const saveTimestamp = ourSaveTime;
   const data = {
     tasks, completedDays:[...completedDays], completionLog,
     nextId, totalElapsed, parkedTasks,
-    _by: CLIENT_ID, _at: Date.now()
+    _by: CLIENT_ID, _at: saveTimestamp
   };
   fetch(DB_URL+'.json', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
     .then(r=>{ 
-      const dot=document.getElementById('syncDot');
-      if(dot) dot.style.background = r.ok ? '#1A7A48' : '#C0341F';
-      const lbl=document.getElementById('syncLabel');
-      if(lbl) lbl.textContent = r.ok ? 'Synced' : 'Error';
+      isSaving = false;
+      lastSyncAt = saveTimestamp;
+      setSyncUI(r.ok ? 'synced' : 'error');
     })
-    .catch(()=>{ 
-      const dot=document.getElementById('syncDot'); if(dot) dot.style.background='#C0341F';
-      const lbl=document.getElementById('syncLabel'); if(lbl) lbl.textContent='Offline';
-    });
+    .catch(()=>{ isSaving=false; setSyncUI('error'); });
 }
 
 function syncPoll(){
+  // Don't poll while we're in the middle of saving
+  if(isSaving) return;
   fetch(DB_URL+'.json')
     .then(r=>r.json())
     .then(data=>{
-      const dot=document.getElementById('syncDot');
-      const lbl=document.getElementById('syncLabel');
-      if(!data){ if(dot) dot.style.background='#1A7A48'; if(lbl) lbl.textContent='Synced'; return; }
-      if(data._by===CLIENT_ID){ if(dot) dot.style.background='#1A7A48'; if(lbl) lbl.textContent='Synced'; return; }
-      if(data._at && data._at <= lastSyncAt){ return; }
+      if(!data){ setSyncUI('synced'); return; }
+      // Skip if this is our own save
+      if(data._by===CLIENT_ID){ setSyncUI('synced'); return; }
+      // Skip if Firebase data is older than our last save
+      if(data._at && data._at < ourSaveTime){ setSyncUI('synced'); return; }
+      // Skip if we've already seen this update
+      if(data._at && data._at <= lastSyncAt){ setSyncUI('synced'); return; }
+      // This is a genuine update from the other user
       lastSyncAt = data._at||0;
-      // Update from other user
       if(data.tasks) tasks = data.tasks;
       if(data.completedDays) completedDays = new Set(data.completedDays);
       if(data.completionLog) completionLog = data.completionLog;
@@ -1720,12 +1732,9 @@ function syncPoll(){
       if(data.parkedTasks) parkedTasks = data.parkedTasks;
       render(); renderParking();
       showToast('📲 List updated');
-      if(dot) dot.style.background='#1A7A48'; if(lbl) lbl.textContent='Synced';
+      setSyncUI('synced');
     })
-    .catch(()=>{
-      const dot=document.getElementById('syncDot'); if(dot) dot.style.background='#C0341F';
-      const lbl=document.getElementById('syncLabel'); if(lbl) lbl.textContent='Offline';
-    });
+    .catch(()=>setSyncUI('error'));
 }
 
 // Patch save() to also sync to Firebase
@@ -1736,13 +1745,12 @@ window.save = function(){
 };
 save = window.save;
 
-// Push local data to Firebase on first load, then poll
+// On first load: push our local state to Firebase FIRST,
+// wait for it to complete, then start polling
 setTimeout(()=>{
-  // First push our current local state up to Firebase
   syncSave();
-  // Then start polling for other user's changes
-  setTimeout(syncPoll, 2000);
-  setInterval(syncPoll, 4000);
+  // Start polling only after save has had time to complete
+  setTimeout(()=>setInterval(syncPoll, 4000), 3000);
 }, 500);
 // ─────────────────────────────────────────────────────
 </script>
