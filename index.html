@@ -1736,9 +1736,14 @@ window.save = function(){
 };
 save = window.save;
 
-// Initial load from Firebase, then poll every 4 seconds
-setTimeout(syncPoll, 1000);
-setInterval(syncPoll, 4000);
+// Push local data to Firebase on first load, then poll
+setTimeout(()=>{
+  // First push our current local state up to Firebase
+  syncSave();
+  // Then start polling for other user's changes
+  setTimeout(syncPoll, 2000);
+  setInterval(syncPoll, 4000);
+}, 500);
 // ─────────────────────────────────────────────────────
 </script>
 </body>
