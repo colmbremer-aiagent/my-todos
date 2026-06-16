@@ -495,7 +495,7 @@ body{
 
 <div id="normalView">
   <div class="metrics">
-    <div class="metric"><div class="label">Total</div><div class="val" id="mTotal">0</div></div>
+    <div class="metric"><div class="label">Open</div><div class="val" id="mTotal">0</div></div>
     <div class="metric"><div class="label">Done</div><div class="val" id="mDone">0</div></div>
     <div class="metric"><div class="label">Urgent</div><div class="val" id="mUrgent">0</div></div>
     <div class="metric"><div class="label">Tracked</div><div class="val" id="mTime">0m</div></div>
@@ -1327,7 +1327,8 @@ function calcEstRemaining(){
 
 function render(){
   const done=tasks.filter(t=>t.done).length,total=tasks.length,pct=total?Math.round((done/total)*100):0;
-  document.getElementById('mTotal').textContent=total;document.getElementById('mDone').textContent=done;
+  const openCount=tasks.filter(t=>!t.done).length;
+  document.getElementById('mTotal').textContent=openCount;document.getElementById('mDone').textContent=done;
   document.getElementById('mUrgent').textContent=tasks.filter(t=>t.urgent&&!t.done).length;
   document.getElementById('mTime').textContent=fmtTotalTime(totalElapsed);
   document.getElementById('mEst').textContent=calcEstRemaining();
