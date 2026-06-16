@@ -685,8 +685,8 @@ async function loadFromFirebase(){
     const data = await r.json();
     setSyncStatus('synced');
     if(!data){
-      // No data yet — push defaults
-      if(!appReady){ appReady=true; applyTheme(false); render(); renderParking(); save(); }
+      // No data in Firebase yet — push our defaults up
+      save();
       return;
     }
     // Skip if this is our own save
@@ -699,34 +699,22 @@ async function loadFromFirebase(){
     nextId=data.nextId||11;
     totalElapsed=data.totalElapsed||0;
     if(data.parkedTasks) parkedTasks=data.parkedTasks;
-    if(!appReady){ appReady=true; applyTheme(false); }
-    else showToast('📲 List updated');
+    showToast('📲 Synced');
     render(); renderParking();
   }catch(e){
     setSyncStatus('error');
-    // Fall back to local on first load
-    if(!appReady){
-      appReady=true;
-      try{const b=localStorage.getItem('todo_v9_backup');if(b){const d=JSON.parse(b);tasks=normalizeTasks(d.tasks);completedDays=new Set(d.completedDays||[]);completionLog=d.completionLog||{};nextId=d.nextId||11;totalElapsed=d.totalElapsed||0;if(d.parkedTasks)parkedTasks=d.parkedTasks;}}catch(ex){}
-      applyTheme(false); render(); renderParking();
-    }
+    // Fall back to local backup if available
+    try{const b=localStorage.getItem('todo_v9_backup');if(b){const d=JSON.parse(b);tasks=normalizeTasks(d.tasks);completedDays=new Set(d.completedDays||[]);completionLog=d.completionLog||{};nextId=d.nextId||11;totalElapsed=d.totalElapsed||0;if(d.parkedTasks)parkedTasks=d.parkedTasks;render();renderParking();}}catch(ex){}
   }
 }
 
-// Quick connection test before polling
-fetch(DB_URL + '.json')
-  .then(r => {
-    if(r.ok){ 
-      document.getElementById('syncLabel').textContent = 'Firebase OK';
-    } else {
-      document.getElementById('syncLabel').textContent = 'Firebase Error ' + r.status;
-    }
-  })
-  .catch(e => {
-    document.getElementById('syncLabel').textContent = 'Fetch failed: ' + e.message;
-  });
+// ── Render immediately with defaults, Firebase will update ──
+applyTheme(false);
+render();
+renderParking();
+appReady = true;
 
-// Load immediately then poll every 3 seconds
+// ── Then sync with Firebase ──────────────────────────
 loadFromFirebase();
 setInterval(loadFromFirebase, 3000);
 // ─────────────────────────────────────────────────────
