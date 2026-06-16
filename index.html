@@ -1747,12 +1747,43 @@ window.save = function(){
 };
 save = window.save;
 
-// On first load: push our local state to Firebase FIRST,
-// wait for it to complete, then start polling
+// On first load:
+// - New device (no localStorage) → PULL from Firebase first
+// - Returning device (has localStorage) → PUSH to Firebase first
+const isNewDevice = !localStorage.getItem('todo_v9');
+
 setTimeout(()=>{
-  syncSave();
-  // Start polling only after save has had time to complete
-  setTimeout(()=>setInterval(syncPoll, 4000), 3000);
+  if(isNewDevice){
+    // Pull from Firebase and use as source of truth
+    fetch(DB_URL+'.json')
+      .then(r=>r.json())
+      .then(data=>{
+        if(data && data.tasks && data.tasks.length > 0){
+          // Firebase has real data — use it
+          tasks = data.tasks;
+          if(data.completedDays) completedDays = new Set(data.completedDays);
+          if(data.completionLog) completionLog = data.completionLog;
+          if(data.nextId) nextId = data.nextId;
+          if(data.totalElapsed) totalElapsed = data.totalElapsed;
+          if(data.parkedTasks) parkedTasks = data.parkedTasks;
+          lastSyncAt = data._at||0;
+          ourSaveTime = data._at||0;
+          // Save to localStorage so we're no longer "new"
+          try{localStorage.setItem('todo_v9', JSON.stringify({tasks,completedDays:[...completedDays],completionLog,nextId,totalElapsed}));}catch(e){}
+          render(); renderParking();
+          setSyncUI('synced');
+        } else {
+          // Firebase is empty — push our defaults up
+          syncSave();
+        }
+        setTimeout(()=>setInterval(syncPoll, 4000), 3000);
+      })
+      .catch(()=>{ syncSave(); setTimeout(()=>setInterval(syncPoll,4000),3000); });
+  } else {
+    // Returning device — push our data, then poll
+    syncSave();
+    setTimeout(()=>setInterval(syncPoll, 4000), 3000);
+  }
 }, 500);
 // ─────────────────────────────────────────────────────
 </script>
