@@ -595,6 +595,13 @@ body{
 <div class="toast" id="toast"></div>
 
 <script>
+// Show any JS errors visibly on screen
+window.onerror = function(msg, src, line, col, err){
+  const div = document.createElement('div');
+  div.style.cssText = 'background:#C0392B;color:#fff;padding:16px;font-size:13px;position:fixed;top:0;left:0;right:0;z-index:99999;font-family:monospace;';
+  div.textContent = 'JS ERROR line ' + line + ': ' + msg;
+  document.body.appendChild(div);
+};
 // Safety shim
 if(typeof sendPrompt === 'undefined') window.sendPrompt = null;
 
@@ -705,6 +712,19 @@ async function loadFromFirebase(){
     }
   }
 }
+
+// Quick connection test before polling
+fetch(DB_URL + '.json')
+  .then(r => {
+    if(r.ok){ 
+      document.getElementById('syncLabel').textContent = 'Firebase OK';
+    } else {
+      document.getElementById('syncLabel').textContent = 'Firebase Error ' + r.status;
+    }
+  })
+  .catch(e => {
+    document.getElementById('syncLabel').textContent = 'Fetch failed: ' + e.message;
+  });
 
 // Load immediately then poll every 3 seconds
 loadFromFirebase();
