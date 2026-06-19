@@ -318,6 +318,16 @@ body{
 .recur-icon{font-size:11px;color:var(--tx3);}
 .rank-badge{font-size:11px;font-weight:800;color:#fff;background:var(--accent);padding:3px 9px;border-radius:20px;box-shadow:0 2px 8px var(--accent-glow);}
 .section-label{font-size:10px;color:var(--tx3);font-weight:800;letter-spacing:0.1em;text-transform:uppercase;margin:1.25rem 0 0.5rem;padding-left:4px;}
+.person-section{margin:0 0 1.5rem;border-radius:var(--r-xl);overflow:hidden;border:1.5px solid var(--br2);background:var(--bg2);box-shadow:var(--shadow);}
+.person-header{display:flex;align-items:center;gap:8px;padding:12px 14px;font-weight:800;font-size:14px;transition:filter 0.15s;}
+.person-header:hover{filter:brightness(0.97);}
+.person-header .p-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:800;flex-shrink:0;}
+.person-header > span:first-of-type{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.person-header .p-count{margin-left:auto;font-size:11px;font-weight:800;padding:3px 9px;border-radius:20px;flex-shrink:0;}
+.person-header .p-add{font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;border:none;cursor:pointer;flex-shrink:0;transition:opacity 0.15s;color:#fff;}
+.person-header .p-add:hover{opacity:0.85;}
+.person-body{padding:10px;display:flex;flex-direction:column;gap:8px;}
+.person-body .task{background:var(--bg);}
 .focus-header{background:linear-gradient(135deg,var(--accent),#8B5CF6);border-radius:var(--r-lg);padding:14px 18px;margin-bottom:1rem;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px var(--accent-glow);}
 .focus-header i{font-size:18px;color:#fff;}
 .focus-header span{font-size:14px;color:#fff;font-weight:700;}
@@ -521,29 +531,24 @@ body{
   <div class="quick-add">
     <div class="qa-row">
       <input class="qa-input" id="qaInput" placeholder="What needs to get done?" onkeydown="if(event.key==='Enter')addTask()" />
-      <select class="qa-select" id="qaCat"><option value="errands">Errands</option><option value="home">Home</option><option value="work">Work</option><option value="finance">Finance</option><option value="family">Family</option><option value="health">Health</option></select>
-      <select class="qa-pri" id="qaPri"><option value="med">Med</option><option value="high">High</option><option value="low">Low</option></select>
-      <select class="qa-energy" id="qaEnergy"><option value="med">Normal</option><option value="high-e">High focus</option><option value="low-e">Low effort</option></select>
-      <input class="qa-date" type="date" id="qaDate" />
-      <select class="qa-recur" id="qaRecur"><option value="">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select>
-      <select class="qa-select" id="qaEst" title="Time estimate">
-        <option value="">⏱ Est.</option>
-        <option value="5m">5 min</option>
-        <option value="15m">15 min</option>
-        <option value="30m">30 min</option>
-        <option value="1h">1 hour</option>
-        <option value="2h">2 hours</option>
-        <option value="2h+">2h+</option>
-      </select>
       <select class="qa-select" id="qaAssign" title="Assign to"><option value="">👤 Anyone</option></select>
       <button class="qa-btn" onclick="addTask()">+ Add ↗</button>
     </div>
-    <div class="qa-row">
-      <input class="qa-note" id="qaNote" placeholder="Note (optional)..." />
-      <input class="qa-tags" id="qaTags" placeholder="Tags: work, urgent..." />
-      <input class="qa-subtasks-input" id="qaSubtasks" placeholder="Subtasks: step 1, step 2..." />
+    <div class="qa-row" style="align-items:center;">
+      <select class="qa-select" id="qaCat"><option value="errands">Errands</option><option value="home">Home</option><option value="work">Work</option><option value="finance">Finance</option><option value="family">Family</option><option value="health">Health</option></select>
+      <input class="qa-date" type="date" id="qaDate" title="Due date (optional)" />
+      <button id="moreToggle" onclick="toggleMoreOptions()" style="font-size:12px;font-weight:700;padding:7px 14px;border-radius:var(--r);border:1.5px solid var(--br2);background:var(--bg);color:var(--tx2);cursor:pointer;">More ▾</button>
     </div>
-    <div class="qa-hint">Press Enter or click Add — logged to Reminders automatically.</div>
+    <div class="qa-row" id="qaMoreRow" style="display:none;">
+      <select class="qa-pri" id="qaPri"><option value="med">Med priority</option><option value="high">High priority</option><option value="low">Low priority</option></select>
+      <select class="qa-recur" id="qaRecur"><option value="">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select>
+      <input class="qa-note" id="qaNote" placeholder="Note (optional)..." />
+    </div>
+    <!-- Hidden fields kept for compatibility, default values -->
+    <select id="qaEnergy" style="display:none;"><option value="med">Normal</option></select>
+    <select id="qaEst" style="display:none;"><option value="">⏱ Est.</option></select>
+    <input id="qaTags" style="display:none;" />
+    <input id="qaSubtasks" style="display:none;" />
   </div>
 
   <div class="filters">
@@ -572,11 +577,17 @@ body{
 </div>
 </div>
 
+<div id="groupToggle" style="display:flex;gap:6px;margin-bottom:10px;align-items:center;">
+  <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:0.05em;">View:</span>
+  <button id="viewPersonBtn" onclick="setGroupMode('person')" style="font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;border:1.5px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;">By person</button>
+  <button id="viewFlatBtn" onclick="setGroupMode('flat')" style="font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;border:1.5px solid var(--br2);background:var(--bg2);color:var(--tx2);cursor:pointer;">By priority</button>
+</div>
+
 <div class="tasks" id="taskList"></div>
 
 <div id="chartWrap" class="bottom-section">
   <div><div class="section-h">Load by area</div><div id="catChart"></div></div>
-  <div><div class="section-h">Completions — 7 days</div><div class="hist-row" id="histChart"></div></div>
+  <div><div class="section-h">Completions — 7 days (per person)</div><div id="histChartPerson"></div></div>
 </div>
 
 <div class="parking-lot" id="parkingLot">
@@ -631,6 +642,8 @@ function save(){try{localStorage.setItem('todo_v9',JSON.stringify({tasks,complet
 
 let tasks,completedDays,completionLog,nextId,totalElapsed,darkMode;
 let completedHistory = [];  // permanent log of completed tasks
+let groupMode = localStorage.getItem('todo_group_mode') || 'person';
+let collapsedPeople = new Set((()=>{try{return JSON.parse(localStorage.getItem('todo_collapsed_people')||'[]');}catch(e){return [];}})());
 
 // ── User identity (must be defined before any render) ──
 let MY_NAME = localStorage.getItem('todo_user_name') || '';
@@ -1232,7 +1245,48 @@ function bulkDelete(){
 
 function renderStreak(){const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(d);}document.getElementById('streakDays').innerHTML=days.map(d=>{const ds=d.toISOString().split('T')[0];const isToday=ds===todayStr,isDone=completedDays.has(ds);return`<div class="day-dot${isDone?' done':''}${isToday?' today':''}"><div class="dot">${isDone?'✓':''}</div><div class="lbl">${DAYS[d.getDay()]}</div></div>`;}).join('');let streak=0;const c=new Date();while(completedDays.has(c.toISOString().split('T')[0])){streak++;c.setDate(c.getDate()-1);}document.getElementById('streakNum').textContent=streak;}
 
-function renderChart(){const pending=tasks.filter(t=>!t.done);const total=pending.length||1;const counts={};pending.forEach(t=>counts[t.cat]=(counts[t.cat]||0)+1);const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);const max=sorted.length?sorted[0][1]:1;document.getElementById('catChart').innerHTML=sorted.map(([cat,count])=>{const meta=CAT_META[cat]||{label:cat,color:'#888'};return`<div class="cat-row"><div class="cat-name">${meta.label}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round((count/max)*100)}%;background:${meta.color};"></div></div><span style="font-size:11px;color:var(--tx3);min-width:32px;">${count} · ${Math.round((count/total)*100)}%</span></div>`;}).join('')||'<div style="font-size:12px;color:var(--tx3);">All done!</div>';const histDays=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);histDays.push(d);}const counts2=histDays.map(d=>completionLog[d.toISOString().split('T')[0]]||0);const maxH=Math.max(...counts2,1);document.getElementById('histChart').innerHTML=histDays.map((d,i)=>{const h=Math.round((counts2[i]/maxH)*64);const isToday=d.toISOString().split('T')[0]===todayStr;return`<div class="hist-bar-wrap"><div class="hist-num">${counts2[i]||''}</div><div class="hist-bar" style="height:${h}px;background:${isToday?'#5B3DE8':'#1B7F4E'};margin-top:auto;"></div><div class="hist-lbl">${DAYS[d.getDay()]}</div></div>`;}).join('');}
+function renderChart(){const pending=tasks.filter(t=>!t.done);const total=pending.length||1;const counts={};pending.forEach(t=>counts[t.cat]=(counts[t.cat]||0)+1);const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);const max=sorted.length?sorted[0][1]:1;document.getElementById('catChart').innerHTML=sorted.map(([cat,count])=>{const meta=CAT_META[cat]||{label:cat,color:'#888'};return`<div class="cat-row"><div class="cat-name">${meta.label}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round((count/max)*100)}%;background:${meta.color};"></div></div><span style="font-size:11px;color:var(--tx3);min-width:32px;">${count} · ${Math.round((count/total)*100)}%</span></div>`;}).join('')||'<div style="font-size:12px;color:var(--tx3);">All done!</div>';const histDays=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);histDays.push(d);}
+  // Build per-person daily counts from completedHistory
+  const people = {};
+  (completedHistory||[]).forEach(h=>{
+    const who = h.completedBy || h.assignee || h.owner || 'Anyone';
+    const day = h.completedAt;
+    if(!day) return;
+    if(!people[who]) people[who] = {};
+    people[who][day] = (people[who][day]||0) + 1;
+  });
+  const personNames = Object.keys(people).sort((a,b)=>{ if(a===MY_NAME)return -1; if(b===MY_NAME)return 1; return a.localeCompare(b); });
+  // Find max across all people/days for consistent scaling
+  let maxH = 1;
+  personNames.forEach(p=>histDays.forEach(d=>{ const c=people[p][d.toISOString().split('T')[0]]||0; if(c>maxH)maxH=c; }));
+
+  const container = document.getElementById('histChartPerson');
+  if(container){
+    if(!personNames.length){
+      container.innerHTML = '<div style="font-size:12px;color:var(--tx3);padding:8px;">Complete tasks to see daily trends per person.</div>';
+    } else {
+      // Legend + grouped bars per day
+      const legend = personNames.map(p=>{
+        const col = p==='Anyone'?'#9490B2':getUserColor(p);
+        return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--tx2);margin-right:12px;"><span style="width:10px;height:10px;border-radius:3px;background:${col};display:inline-block;"></span>${p===MY_NAME?p+' (you)':p}</span>`;
+      }).join('');
+
+      const cols = histDays.map(d=>{
+        const ds = d.toISOString().split('T')[0];
+        const isToday = ds===todayStr;
+        const bars = personNames.map(p=>{
+          const col = p==='Anyone'?'#9490B2':getUserColor(p);
+          const cnt = people[p][ds]||0;
+          const h = Math.round((cnt/maxH)*60);
+          return `<div title="${p}: ${cnt}" style="flex:1;min-width:6px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;"><div style="font-size:9px;font-weight:700;color:${col};line-height:1;margin-bottom:2px;">${cnt||''}</div><div style="width:100%;height:${h}px;background:${col};border-radius:3px 3px 0 0;min-height:${cnt?'3px':'0'};"></div></div>`;
+        }).join('');
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;"><div style="display:flex;gap:2px;align-items:flex-end;height:64px;width:100%;justify-content:center;">${bars}</div><div style="font-size:10px;font-weight:700;color:${isToday?'var(--accent)':'var(--tx3)'};">${DAYS[d.getDay()]}</div></div>`;
+      }).join('');
+
+      container.innerHTML = `<div style="margin-bottom:10px;">${legend}</div><div style="display:flex;gap:4px;align-items:flex-end;">${cols}</div>`;
+    }
+  }
+}
 
 function editTitle(id, titleEl){
   const t = tasks.find(t => t.id === id);
@@ -1446,12 +1500,104 @@ function render(){
   } else if(currentFilter==='done'){
     // Show completed tasks directly, no urgent/normal split needed
     visible.forEach(t=>list.appendChild(makeTask(t)));
+  } else if(groupMode==='person'){
+    // Group open tasks into distinct visual sections per person
+    const groups = {};
+    visible.forEach(t=>{
+      const who = t.assignee || t.owner || 'Anyone';
+      (groups[who] = groups[who] || []).push(t);
+    });
+    const names = Object.keys(groups).sort((a,b)=>{
+      if(a===MY_NAME) return -1; if(b===MY_NAME) return 1;
+      if(a==='Anyone') return 1; if(b==='Anyone') return -1;
+      return a.localeCompare(b);
+    });
+    names.forEach(name=>{
+      const isAnyone = name==='Anyone';
+      const color = isAnyone ? '#9490B2' : getUserColor(name);
+      const isMe = name===MY_NAME;
+      const initial = isAnyone ? '👥' : name.charAt(0).toUpperCase();
+      const collapsed = collapsedPeople.has(name);
+
+      const section = document.createElement('div');
+      section.className = 'person-section';
+      section.style.borderColor = color + '55';
+
+      const header = document.createElement('div');
+      header.className = 'person-header';
+      header.style.background = color + '14';
+      header.style.color = color;
+      header.style.cursor = 'pointer';
+      header.innerHTML = `
+        <div class="p-avatar" style="background:${color};">${initial}</div>
+        <span>${isMe ? name + ' (you)' : name}</span>
+        <span class="p-count" style="background:${color}22;color:${color};">${groups[name].length} open</span>
+        <button class="p-add" data-addfor="${isAnyone?'':name}" style="background:${color};color:#fff;" title="Add task for ${isAnyone?'anyone':name}">+ here</button>
+        <span class="p-chevron" style="font-size:14px;transition:transform 0.2s;transform:rotate(${collapsed?'-90deg':'0deg'});">▾</span>
+      `;
+      // Quick-add button — pre-fills assignee and focuses the input
+      const addBtn = header.querySelector('.p-add');
+      if(addBtn){
+        addBtn.addEventListener('click', e=>{
+          e.stopPropagation();  // don't toggle collapse
+          const assignSel = document.getElementById('qaAssign');
+          if(assignSel){ assignSel.value = addBtn.dataset.addfor || ''; }
+          const input = document.getElementById('qaInput');
+          if(input){
+            input.scrollIntoView({behavior:'smooth', block:'center'});
+            setTimeout(()=>input.focus(), 300);
+          }
+          showToast(addBtn.dataset.addfor ? `✏️ Adding task for ${addBtn.dataset.addfor}` : '✏️ Adding shared task');
+        });
+      }
+      header.addEventListener('click', ()=>{
+        if(collapsedPeople.has(name)) collapsedPeople.delete(name);
+        else collapsedPeople.add(name);
+        try{localStorage.setItem('todo_collapsed_people', JSON.stringify([...collapsedPeople]));}catch(e){}
+        render();
+      });
+      section.appendChild(header);
+
+      if(!collapsed){
+        const body = document.createElement('div');
+        body.className = 'person-body';
+        groups[name].sort((a,b)=>(b.urgent?1:0)-(a.urgent?1:0) || taskScore(b)-taskScore(a));
+        groups[name].forEach(t=>body.appendChild(makeTask(t)));
+        section.appendChild(body);
+      }
+
+      list.appendChild(section);
+    });
   } else {
     const urgent=visible.filter(t=>t.urgent),normal=visible.filter(t=>!t.urgent);
     if(urgent.length){const l1=document.createElement('div');l1.className='section-label';l1.textContent='Urgent';list.appendChild(l1);urgent.forEach(t=>list.appendChild(makeTask(t)));if(normal.length){const l2=document.createElement('div');l2.className='section-label';l2.textContent='Up next';list.appendChild(l2);}}
     normal.forEach(t=>list.appendChild(makeTask(t)));
   }
   renderChart();
+}
+
+function toggleMoreOptions(){
+  const row = document.getElementById('qaMoreRow');
+  const btn = document.getElementById('moreToggle');
+  if(!row) return;
+  const showing = row.style.display !== 'none';
+  row.style.display = showing ? 'none' : 'flex';
+  if(btn) btn.innerHTML = showing ? 'More ▾' : 'Less ▴';
+}
+
+function setGroupMode(mode){
+  groupMode = mode;
+  localStorage.setItem('todo_group_mode', mode);
+  const flatBtn=document.getElementById('viewFlatBtn');
+  const personBtn=document.getElementById('viewPersonBtn');
+  if(flatBtn&&personBtn){
+    const on='border:1.5px solid var(--accent);background:var(--accent);color:#fff;';
+    const off='border:1.5px solid var(--br2);background:var(--bg2);color:var(--tx2);';
+    const base='font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;';
+    flatBtn.style.cssText = base + (mode==='flat'?on:off);
+    personBtn.style.cssText = base + (mode==='person'?on:off);
+  }
+  render();
 }
 
 function getTaskAge(t){
@@ -1790,10 +1936,10 @@ function renderParking(){
 }
 renderParking();
 
-render();
+setGroupMode(groupMode);  // applies saved view mode + button styles + renders
 
 // ── Firebase real-time sync ──────────────────────────
-const DB_URL = 'https://my-todos-c62fd-default-rtdb.firebaseio.com/household';
+const DB_URL = 'https://my-todos-c62fd-default-rtdb.firebaseio.com/secure_f1Yx9ug2KnmzEpbg77Nb6Xk5IRh8et6f/household';
 let CLIENT_ID = localStorage.getItem('todo_client_id');
 if(!CLIENT_ID){ CLIENT_ID = Math.random().toString(36).substr(2,9); localStorage.setItem('todo_client_id',CLIENT_ID); }
 
