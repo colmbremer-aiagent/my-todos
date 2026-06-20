@@ -1350,6 +1350,20 @@ function editDue(id, dueEl){
   input.addEventListener('click', e=>e.stopPropagation());
 }
 
+function cycleAssignee(id){
+  const t = tasks.find(t => t.id === id);
+  if(!t) return;
+  // Build the rotation: Anyone (empty) + all known users
+  const users = getKnownUsers();
+  const options = ['', ...users];  // '' = Anyone
+  const cur = options.indexOf(t.assignee || '');
+  const next = options[(cur + 1) % options.length];
+  t.assignee = next;
+  save();
+  render();
+  showToast(next ? `Assigned to ${next}` : 'Set to Anyone');
+}
+
 function cyclePriority(id, dotEl){
   const t = tasks.find(t => t.id === id);
   if(!t) return;
@@ -1703,15 +1717,13 @@ function makeTask(t,isFocus,rank){
   const age=getTaskAge(t);
   const ageHTML=age?`<span class="age-badge ${age.cls}" title="Created ${age.days} days ago">${age.label}</span>`:'';
   const estHTML=`<span class="time-est-badge${['5m','15m'].includes(t.est)?' quick':''}" data-est="${t.id}" title="Tap to change estimate" style="cursor:pointer;${!t.est?'opacity:0.35;':''}">⏱${t.est||'est'}</span>`;
-  // Assignee badge (who the task is FOR) takes priority; falls back to owner
+  // Assignee badge — always shown, tappable to reassign
   let ownerHTML = '';
   if(t.assignee){
     const ac = getUserColor(t.assignee);
-    const fromTxt = (t.owner && t.owner!==t.assignee) ? ` (from ${t.owner})` : '';
-    ownerHTML = `<span class="owner-badge" style="background:${ac}1A;color:${ac};border:1px solid ${ac}66;" title="For ${t.assignee}${fromTxt}">➡ ${t.assignee}</span>`;
-  } else if(t.owner){
-    const oc = getUserColor(t.owner);
-    ownerHTML = `<span class="owner-badge" style="background:${oc}1A;color:${oc};border:1px solid ${oc}66;" title="Added by ${t.owner}">${t.owner}</span>`;
+    ownerHTML = `<span class="owner-badge" data-assign="${t.id}" style="background:${ac}1A;color:${ac};border:1px solid ${ac}66;cursor:pointer;" title="Tap to reassign">➡ ${t.assignee}</span>`;
+  } else {
+    ownerHTML = `<span class="owner-badge" data-assign="${t.id}" style="background:var(--bg3);color:var(--tx3);border:1px solid var(--br2);cursor:pointer;" title="Tap to assign">👤 Anyone</span>`;
   }
   const ownerColor = t.assignee ? getUserColor(t.assignee) : (t.ownerColor || (t.owner ? getUserColor(t.owner) : ''));
 
@@ -1816,6 +1828,9 @@ function makeTask(t,isFocus,rank){
   });
   el.querySelectorAll('[data-est]').forEach(badge=>{
     badge.addEventListener('click',e=>{e.stopPropagation();cycleEstimate(t.id,badge);});
+  });
+  el.querySelectorAll('[data-assign]').forEach(badge=>{
+    badge.addEventListener('click',e=>{e.stopPropagation();cycleAssignee(t.id);});
   });
   el.querySelectorAll('[data-park]').forEach(btn=>{
     btn.addEventListener('click',e=>{e.stopPropagation();parkTask(t.id);});
