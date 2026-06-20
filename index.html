@@ -1351,17 +1351,54 @@ function editDue(id, dueEl){
 }
 
 function cycleAssignee(id){
+  // Open a picker menu instead of cycling
   const t = tasks.find(t => t.id === id);
   if(!t) return;
-  // Build the rotation: Anyone (empty) + all known users
+  showAssigneePicker(id);
+}
+
+function showAssigneePicker(id){
+  const t = tasks.find(t => t.id === id);
+  if(!t) return;
+  // Remove any existing picker
+  const existing = document.getElementById('assignPicker');
+  if(existing) existing.remove();
+
   const users = getKnownUsers();
-  const options = ['', ...users];  // '' = Anyone
-  const cur = options.indexOf(t.assignee || '');
-  const next = options[(cur + 1) % options.length];
-  t.assignee = next;
-  save();
-  render();
-  showToast(next ? `Assigned to ${next}` : 'Set to Anyone');
+  const options = [{label:'👤 Anyone', val:''}, ...users.map(u=>({label:u, val:u}))];
+
+  const overlay = document.createElement('div');
+  overlay.id = 'assignPicker';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;padding:24px;';
+
+  const menu = document.createElement('div');
+  menu.style.cssText = 'background:var(--bg2);border-radius:var(--r-xl);padding:16px;width:100%;max-width:300px;box-shadow:var(--shadow-md);border:1.5px solid var(--br2);';
+  menu.innerHTML = `<div style="font-size:14px;font-weight:800;color:var(--tx);margin-bottom:4px;">Assign this task to:</div><div style="font-size:12px;color:var(--tx3);margin-bottom:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.title}</div>`;
+
+  options.forEach(opt=>{
+    const isCurrent = (t.assignee||'') === opt.val;
+    const color = opt.val ? getUserColor(opt.val) : '#9490B2';
+    const btn = document.createElement('button');
+    btn.style.cssText = `display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:11px 12px;margin-bottom:6px;border-radius:var(--r-lg);border:1.5px solid ${isCurrent?color:'var(--br2)'};background:${isCurrent?color+'18':'var(--bg)'};color:var(--tx);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;`;
+    btn.innerHTML = `<span style="width:22px;height:22px;border-radius:50%;background:${color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;">${opt.val?opt.val.charAt(0).toUpperCase():'👥'}</span><span>${opt.val?opt.label:'Anyone'}</span>${isCurrent?'<span style="margin-left:auto;color:'+color+';">✓</span>':''}`;
+    btn.addEventListener('click', ()=>{
+      t.assignee = opt.val;
+      save(); render();
+      overlay.remove();
+      showToast(opt.val ? `Assigned to ${opt.val}` : 'Set to Anyone');
+    });
+    menu.appendChild(btn);
+  });
+
+  const cancel = document.createElement('button');
+  cancel.style.cssText = 'width:100%;padding:10px;margin-top:6px;border-radius:var(--r-lg);border:none;background:transparent;color:var(--tx3);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', ()=>overlay.remove());
+  menu.appendChild(cancel);
+
+  overlay.appendChild(menu);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 }
 
 function cyclePriority(id, dotEl){
