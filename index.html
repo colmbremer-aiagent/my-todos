@@ -351,9 +351,10 @@ body{
 [data-theme="dark"] .age-aging{background:#2A1E0A;color:#E0963A;}
 [data-theme="dark"] .age-stale{background:#2A1210;color:#E05C4E;}
 [data-theme="dark"] .age-old{background:#3A0A0A;color:#FF6B6B;}
-.park-btn,.defer-btn{width:26px;height:26px;border-radius:8px;border:1px solid var(--br2);background:var(--bg);color:var(--tx3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;transition:all 0.15s;}
+.park-btn,.defer-btn,.del-btn{width:26px;height:26px;border-radius:8px;border:1px solid var(--br2);background:var(--bg);color:var(--tx3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;transition:all 0.15s;}
 .park-btn:hover{border-color:var(--amber);color:var(--amber);background:var(--amber-bg);}
 .defer-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);}
+.del-btn:hover{border-color:var(--red);background:var(--red-bg);}
 .parking-lot{margin-top:1.5rem;border:1px solid var(--br);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--shadow);}
 .parking-lot-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;background:var(--bg2);user-select:none;transition:background 0.15s;}
 .parking-lot-header:hover{background:var(--bg3);}
@@ -1648,6 +1649,7 @@ function makeTask(t,isFocus,rank){
         <span class="badge ${t.cat}" data-cat="${t.id}" title="Click to change category" style="cursor:pointer;">${t.cat}</span>
         ${!t.done?`<button class="park-btn" data-park="${t.id}" title="Park for later">🅿</button>`:''}
         ${!t.done?`<button class="defer-btn" data-defer="${t.id}" title="Defer to tomorrow">⏩</button>`:''}
+        <button class="del-btn" data-del="${t.id}" title="Delete task">🗑</button>
         ${isFocus?`<span class="rank-badge">#${rank}</span>`:''}
       </div>
       <div id="subtasks-${t.id}">${buildSubtasksHTML(t)}</div>
@@ -1663,6 +1665,7 @@ function makeTask(t,isFocus,rank){
       <span class="badge ${t.cat}" data-cat="${t.id}" title="Click to change category" style="cursor:pointer;">${t.cat}</span>
       ${!t.done?`<button class="park-btn" data-park="${t.id}" title="Park for later">🅿</button>`:''}
       ${!t.done?`<button class="defer-btn" data-defer="${t.id}" title="Defer to tomorrow">⏩</button>`:''}
+      <button class="del-btn" data-del="${t.id}" title="Delete task">🗑</button>
       ${isFocus?`<span class="rank-badge">#${rank}</span>`:''}
     </div>`;
 
@@ -1732,6 +1735,9 @@ function makeTask(t,isFocus,rank){
   });
   el.querySelectorAll('[data-defer]').forEach(btn=>{
     btn.addEventListener('click',e=>{e.stopPropagation();deferTask(t.id);});
+  });
+  el.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.addEventListener('click',e=>{e.stopPropagation();deleteTask(t.id);});
   });
 
   // Drag handle — only this element initiates drag
