@@ -467,7 +467,7 @@ body{
     <button class="icon-btn" onclick="confirmDailyReset()" aria-label="Daily reset" title="Daily reset">🌅</button>
 
     <button class="icon-btn" onclick="openHistory()" aria-label="History" title="Completion history">📋</button>
-    <div onclick="promptForName()" style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--tx3);cursor:pointer;padding:6px 12px;border-radius:20px;border:1.5px solid var(--br2);background:var(--bg2);" title="Tap to set your name"><div id="syncDot" style="width:8px;height:8px;border-radius:50%;background:var(--amber);flex-shrink:0;"></div><span id="syncLabel" style="font-size:10px;">Sync off</span><span id="nameLabel"></span></div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--tx3);padding:6px 12px;border-radius:20px;border:1.5px solid var(--br2);background:var(--bg2);"><div id="syncDot" style="width:8px;height:8px;border-radius:50%;background:var(--amber);flex-shrink:0;"></div><span id="syncLabel" style="font-size:10px;">Sync off</span></div>
 
   </div>
 </div>
@@ -483,7 +483,6 @@ body{
       <button onclick="closeHistory()" style="width:38px;height:38px;border-radius:12px;border:1px solid var(--br2);background:var(--bg2);color:var(--tx2);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;">✕</button>
     </div>
     <div id="historyStats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1.5rem;"></div>
-    <div id="historyLeaderboard" style="margin-bottom:1.5rem;"></div>
     <div id="historyList"></div>
   </div>
 </div>
@@ -531,7 +530,6 @@ body{
   <div class="quick-add">
     <div class="qa-row">
       <input class="qa-input" id="qaInput" placeholder="What needs to get done?" onkeydown="if(event.key==='Enter')addTask()" />
-      <select class="qa-select" id="qaAssign" title="Assign to"><option value="">👤 Anyone</option></select>
       <button class="qa-btn" onclick="addTask()">+ Add ↗</button>
     </div>
     <div class="qa-row" style="align-items:center;">
@@ -553,7 +551,6 @@ body{
 
   <div class="filters">
     <button class="pill active" data-filter="all" onclick="setFilter('all',this)">All</button>
-    <button class="pill" data-filter="forme" onclick="setFilter('forme',this)" style="font-weight:800;">⭐ For me</button>
     <button class="pill" data-filter="family" onclick="setFilter('family',this)">Family</button>
     <button class="pill" data-filter="home" onclick="setFilter('home',this)">Home</button>
     <button class="pill" data-filter="errands" onclick="setFilter('errands',this)">Errands</button>
@@ -577,17 +574,11 @@ body{
 </div>
 </div>
 
-<div id="groupToggle" style="display:flex;gap:6px;margin-bottom:10px;align-items:center;">
-  <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:0.05em;">View:</span>
-  <button id="viewPersonBtn" onclick="setGroupMode('person')" style="font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;border:1.5px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;">By person</button>
-  <button id="viewFlatBtn" onclick="setGroupMode('flat')" style="font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;border:1.5px solid var(--br2);background:var(--bg2);color:var(--tx2);cursor:pointer;">By priority</button>
-</div>
-
 <div class="tasks" id="taskList"></div>
 
 <div id="chartWrap" class="bottom-section">
   <div><div class="section-h">Load by area</div><div id="catChart"></div></div>
-  <div><div class="section-h">Completions — 7 days (per person)</div><div id="histChartPerson"></div></div>
+  <div><div class="section-h">Completions — 7 days</div><div class="hist-row" id="histChart"></div></div>
 </div>
 
 <div class="parking-lot" id="parkingLot">
@@ -937,10 +928,9 @@ function addTask(){
   const rawTags=document.getElementById('qaTags').value.trim();const tags=rawTags?rawTags.split(',').map(s=>s.trim()).filter(Boolean):[];
   const rawSubs=document.getElementById('qaSubtasks').value.trim();const subtasks=rawSubs?rawSubs.split(',').map(s=>({text:s.trim(),done:false})).filter(s=>s.text):[];
   const urgent=due===todayStr;
-  const assignee=document.getElementById('qaAssign').value||'';
-  tasks.unshift({id:nextId++,title,cat,due,pri,energy,note,tags,recur,est,subtasks,urgent,done:false,elapsed:0,createdAt:todayStr,owner:MY_NAME||'',assignee:assignee,ownerColor:getUserColor(MY_NAME)});
+  tasks.unshift({id:nextId++,title,cat,due,pri,energy,note,tags,recur,est,subtasks,urgent,done:false,elapsed:0,createdAt:todayStr});
   ['qaInput','qaDate','qaNote','qaTags','qaSubtasks'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  document.getElementById('qaEst').value='';document.getElementById('qaAssign').value='';
+  document.getElementById('qaEst').value='';
   save();render();showToast('✓ Task added');
   try{ if(typeof sendPrompt==='function') sendPrompt(`Add to reminders: "${title}" — ${cat}, ${pri} priority${due?' due '+due:''}${recur?' repeats '+recur:''}${note?' — '+note:''}${tags.length?' tags: '+tags.join(', '):''}`); }catch(e){}}
 
@@ -953,8 +943,7 @@ function toggle(id){
     completedDays.add(todayStr);
     completionLog[todayStr]=(completionLog[todayStr]||0)+1;
     // Log to permanent history — credit current user if task has no owner/assignee
-    const completedBy = t.assignee || t.owner || MY_NAME || '';
-    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',owner:t.owner||MY_NAME||'',assignee:t.assignee||'',completedBy:completedBy,completedAt:todayStr,completedTs:Date.now()});
+    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',completedAt:todayStr,completedTs:Date.now()});
     if(completedHistory.length>500) completedHistory=completedHistory.slice(0,500);
     if(t.recur){
       // Build the rescheduled copy
@@ -1041,43 +1030,7 @@ function renderHistory(){
     <div class="history-stat"><div class="h-val">${topCat?CAT_META[topCat[0]]?.label||topCat[0]:'—'}</div><div class="h-lbl">Top area</div></div>
   `;
 
-  // ── Weekly leaderboard per person ──
-  const weekAgo = Date.now() - 7*86400000;
-  const sevenDaysAgoStr = new Date(weekAgo).toISOString().split('T')[0];
-  const personCounts = {};
-  done.forEach(t=>{
-    // Determine if completed within the last 7 days
-    let inWeek = false;
-    if(t.completedTs && t.completedTs >= weekAgo) inWeek = true;
-    else if(t.completedAt && t.completedAt >= sevenDaysAgoStr) inWeek = true;
-    else if(!t.completedTs && !t.completedAt) inWeek = true; // no date info — count it
-    if(!inWeek) return;
-    const who = t.completedBy || t.assignee || t.owner || '';
-    if(!who) return; // only count tasks with a name attached
-    personCounts[who] = (personCounts[who]||0) + 1;
-  });
-  const ranked = Object.entries(personCounts).sort((a,b)=>b[1]-a[1]);
-  const lb = document.getElementById('historyLeaderboard');
-  if(ranked.length >= 1){
-    const maxCount = ranked[0][1] || 1;
-    const medals = ['🥇','🥈','🥉'];
-    lb.innerHTML = `
-      <div style="font-size:13px;font-weight:800;color:var(--tx2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">🏆 This week's leaderboard</div>
-      ${ranked.map(([name,count],i)=>{
-        const color = getUserColor(name);
-        const pct = Math.round((count/maxCount)*100);
-        return `
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-          <div style="font-size:16px;width:24px;flex-shrink:0;">${medals[i]||'·'}</div>
-          <div style="font-weight:700;font-size:13px;color:${color};width:80px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</div>
-          <div style="flex:1;height:18px;background:var(--bg3);border-radius:10px;overflow:hidden;">
-            <div style="height:100%;width:${pct}%;background:${color};border-radius:10px;transition:width 0.4s;"></div>
-          </div>
-          <div style="font-weight:800;font-size:14px;color:${color};width:28px;text-align:right;flex-shrink:0;">${count}</div>
-        </div>`;
-      }).join('')}
-    `;
-  } else {
+ else {
     lb.innerHTML = '<div style="font-size:12px;color:var(--tx3);text-align:center;padding:12px;background:var(--bg3);border-radius:12px;">🏆 Complete tasks with a name set to build the weekly leaderboard</div>';
   }
 
@@ -1122,13 +1075,10 @@ function renderHistory(){
         <span class="history-group-count">${grp.length} task${grp.length!==1?'s':''}</span>
       </div>
       ${grp.map(t=>{
-        const who = t.assignee||t.owner||'';
-        const whoColor = who?getUserColor(who):'';
         return `
         <div class="history-item">
           <div class="history-check">✓</div>
           <div class="history-title">${t.title}</div>
-          ${who?`<span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;background:${whoColor}1A;color:${whoColor};">${who}</span>`:''}
           <span class="history-cat badge ${t.cat}">${t.cat}</span>
           ${t.est?`<span style="font-size:10px;color:var(--tx3);font-weight:600;">⏱${t.est}</span>`:''}
         </div>`;}).join('')}
@@ -1212,7 +1162,7 @@ function bulkComplete(){
     t.completedAt=todayStr;
     completedDays.add(todayStr);
     completionLog[todayStr]=(completionLog[todayStr]||0)+1;
-    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',owner:t.owner||MY_NAME||'',assignee:t.assignee||'',completedBy:(t.assignee||t.owner||MY_NAME||''),completedAt:todayStr,completedTs:Date.now()});
+    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',completedAt:todayStr,completedTs:Date.now()});
   });
   if(completedHistory.length>500) completedHistory=completedHistory.slice(0,500);
   const n=selectedIds.size;
@@ -1246,46 +1196,10 @@ function bulkDelete(){
 function renderStreak(){const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(d);}document.getElementById('streakDays').innerHTML=days.map(d=>{const ds=d.toISOString().split('T')[0];const isToday=ds===todayStr,isDone=completedDays.has(ds);return`<div class="day-dot${isDone?' done':''}${isToday?' today':''}"><div class="dot">${isDone?'✓':''}</div><div class="lbl">${DAYS[d.getDay()]}</div></div>`;}).join('');let streak=0;const c=new Date();while(completedDays.has(c.toISOString().split('T')[0])){streak++;c.setDate(c.getDate()-1);}document.getElementById('streakNum').textContent=streak;}
 
 function renderChart(){const pending=tasks.filter(t=>!t.done);const total=pending.length||1;const counts={};pending.forEach(t=>counts[t.cat]=(counts[t.cat]||0)+1);const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);const max=sorted.length?sorted[0][1]:1;document.getElementById('catChart').innerHTML=sorted.map(([cat,count])=>{const meta=CAT_META[cat]||{label:cat,color:'#888'};return`<div class="cat-row"><div class="cat-name">${meta.label}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round((count/max)*100)}%;background:${meta.color};"></div></div><span style="font-size:11px;color:var(--tx3);min-width:32px;">${count} · ${Math.round((count/total)*100)}%</span></div>`;}).join('')||'<div style="font-size:12px;color:var(--tx3);">All done!</div>';const histDays=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);histDays.push(d);}
-  // Build per-person daily counts from completedHistory
-  const people = {};
-  (completedHistory||[]).forEach(h=>{
-    const who = h.completedBy || h.assignee || h.owner || 'Anyone';
-    const day = h.completedAt;
-    if(!day) return;
-    if(!people[who]) people[who] = {};
-    people[who][day] = (people[who][day]||0) + 1;
-  });
-  const personNames = Object.keys(people).sort((a,b)=>{ if(a===MY_NAME)return -1; if(b===MY_NAME)return 1; return a.localeCompare(b); });
-  // Find max across all people/days for consistent scaling
-  let maxH = 1;
-  personNames.forEach(p=>histDays.forEach(d=>{ const c=people[p][d.toISOString().split('T')[0]]||0; if(c>maxH)maxH=c; }));
-
-  const container = document.getElementById('histChartPerson');
-  if(container){
-    if(!personNames.length){
-      container.innerHTML = '<div style="font-size:12px;color:var(--tx3);padding:8px;">Complete tasks to see daily trends per person.</div>';
-    } else {
-      // Legend + grouped bars per day
-      const legend = personNames.map(p=>{
-        const col = p==='Anyone'?'#9490B2':getUserColor(p);
-        return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--tx2);margin-right:12px;"><span style="width:10px;height:10px;border-radius:3px;background:${col};display:inline-block;"></span>${p===MY_NAME?p+' (you)':p}</span>`;
-      }).join('');
-
-      const cols = histDays.map(d=>{
-        const ds = d.toISOString().split('T')[0];
-        const isToday = ds===todayStr;
-        const bars = personNames.map(p=>{
-          const col = p==='Anyone'?'#9490B2':getUserColor(p);
-          const cnt = people[p][ds]||0;
-          const h = Math.round((cnt/maxH)*60);
-          return `<div title="${p}: ${cnt}" style="flex:1;min-width:6px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;"><div style="font-size:9px;font-weight:700;color:${col};line-height:1;margin-bottom:2px;">${cnt||''}</div><div style="width:100%;height:${h}px;background:${col};border-radius:3px 3px 0 0;min-height:${cnt?'3px':'0'};"></div></div>`;
-        }).join('');
-        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;"><div style="display:flex;gap:2px;align-items:flex-end;height:64px;width:100%;justify-content:center;">${bars}</div><div style="font-size:10px;font-weight:700;color:${isToday?'var(--accent)':'var(--tx3)'};">${DAYS[d.getDay()]}</div></div>`;
-      }).join('');
-
-      container.innerHTML = `<div style="margin-bottom:10px;">${legend}</div><div style="display:flex;gap:4px;align-items:flex-end;">${cols}</div>`;
-    }
-  }
+  const counts2=histDays.map(d=>completionLog[d.toISOString().split('T')[0]]||0);
+  const maxH=Math.max(...counts2,1);
+  const hc=document.getElementById('histChart');
+  if(hc) hc.innerHTML=histDays.map((d,i)=>{const h=Math.round((counts2[i]/maxH)*64);const isToday=d.toISOString().split('T')[0]===todayStr;return`<div class="hist-bar-wrap"><div class="hist-num">${counts2[i]||''}</div><div class="hist-bar" style="height:${h}px;background:${isToday?'#5B3DE8':'#1B7F4E'};margin-top:auto;"></div><div class="hist-lbl">${DAYS[d.getDay()]}</div></div>`;}).join('');
 }
 
 function editTitle(id, titleEl){
@@ -1453,8 +1367,7 @@ function getVisible(){
     v=tasks.filter(t=>t.pri==='high'&&!t.done);
   } else if(currentFilter==='recurring'){
     v=tasks.filter(t=>t.recur&&!t.done);
-  } else if(currentFilter==='forme'){
-    v=tasks.filter(t=>!t.done && (t.assignee===MY_NAME || (!t.assignee && t.owner===MY_NAME)));
+
   } else {
     v=tasks.filter(t=>t.cat===currentFilter&&!t.done);
   }
@@ -1531,9 +1444,6 @@ function calcEstRemaining(){
 }
 
 function render(){
-  refreshAssignDropdown();
-  const _nl=document.getElementById('nameLabel');
-  if(_nl) _nl.innerHTML = MY_NAME ? `<span style="color:${getUserColor(MY_NAME)};font-weight:800;">👤 ${MY_NAME}</span>` : '<span style="color:var(--accent);font-weight:800;">👤 Tap to set name</span>';
   const done=tasks.filter(t=>t.done).length,total=tasks.length,pct=total?Math.round((done/total)*100):0;
   const openCount=tasks.filter(t=>!t.done).length;
   document.getElementById('mTotal').textContent=openCount;document.getElementById('mDone').textContent=done;
@@ -1551,76 +1461,6 @@ function render(){
   } else if(currentFilter==='done'){
     // Show completed tasks directly, no urgent/normal split needed
     visible.forEach(t=>list.appendChild(makeTask(t)));
-  } else if(groupMode==='person'){
-    // Group open tasks into distinct visual sections per person
-    // If a task has an explicit assignee → that person's section.
-    // If assigned to "Anyone" (no assignee) → Anyone section.
-    const groups = {};
-    visible.forEach(t=>{
-      const who = t.assignee ? t.assignee : 'Anyone';
-      (groups[who] = groups[who] || []).push(t);
-    });
-    const names = Object.keys(groups).sort((a,b)=>{
-      if(a===MY_NAME) return -1; if(b===MY_NAME) return 1;
-      if(a==='Anyone') return 1; if(b==='Anyone') return -1;
-      return a.localeCompare(b);
-    });
-    names.forEach(name=>{
-      const isAnyone = name==='Anyone';
-      const color = isAnyone ? '#9490B2' : getUserColor(name);
-      const isMe = name===MY_NAME;
-      const initial = isAnyone ? '👥' : name.charAt(0).toUpperCase();
-      const collapsed = collapsedPeople.has(name);
-
-      const section = document.createElement('div');
-      section.className = 'person-section';
-      section.style.borderColor = color + '55';
-
-      const header = document.createElement('div');
-      header.className = 'person-header';
-      header.style.background = color + '14';
-      header.style.color = color;
-      header.style.cursor = 'pointer';
-      header.innerHTML = `
-        <div class="p-avatar" style="background:${color};">${initial}</div>
-        <span>${isMe ? name + ' (you)' : name}</span>
-        <span class="p-count" style="background:${color}22;color:${color};">${groups[name].length} open</span>
-        <button class="p-add" data-addfor="${isAnyone?'':name}" style="background:${color};color:#fff;" title="Add task for ${isAnyone?'anyone':name}">+ here</button>
-        <span class="p-chevron" style="font-size:14px;transition:transform 0.2s;transform:rotate(${collapsed?'-90deg':'0deg'});">▾</span>
-      `;
-      // Quick-add button — pre-fills assignee and focuses the input
-      const addBtn = header.querySelector('.p-add');
-      if(addBtn){
-        addBtn.addEventListener('click', e=>{
-          e.stopPropagation();  // don't toggle collapse
-          const assignSel = document.getElementById('qaAssign');
-          if(assignSel){ assignSel.value = addBtn.dataset.addfor || ''; }
-          const input = document.getElementById('qaInput');
-          if(input){
-            input.scrollIntoView({behavior:'smooth', block:'center'});
-            setTimeout(()=>input.focus(), 300);
-          }
-          showToast(addBtn.dataset.addfor ? `✏️ Adding task for ${addBtn.dataset.addfor}` : '✏️ Adding shared task');
-        });
-      }
-      header.addEventListener('click', ()=>{
-        if(collapsedPeople.has(name)) collapsedPeople.delete(name);
-        else collapsedPeople.add(name);
-        try{localStorage.setItem('todo_collapsed_people', JSON.stringify([...collapsedPeople]));}catch(e){}
-        render();
-      });
-      section.appendChild(header);
-
-      if(!collapsed){
-        const body = document.createElement('div');
-        body.className = 'person-body';
-        groups[name].sort((a,b)=>(b.urgent?1:0)-(a.urgent?1:0) || taskScore(b)-taskScore(a));
-        groups[name].forEach(t=>body.appendChild(makeTask(t)));
-        section.appendChild(body);
-      }
-
-      list.appendChild(section);
-    });
   } else {
     const urgent=visible.filter(t=>t.urgent),normal=visible.filter(t=>!t.urgent);
     if(urgent.length){const l1=document.createElement('div');l1.className='section-label';l1.textContent='Urgent';list.appendChild(l1);urgent.forEach(t=>list.appendChild(makeTask(t)));if(normal.length){const l2=document.createElement('div');l2.className='section-label';l2.textContent='Up next';list.appendChild(l2);}}
@@ -1754,15 +1594,8 @@ function makeTask(t,isFocus,rank){
   const age=getTaskAge(t);
   const ageHTML=age?`<span class="age-badge ${age.cls}" title="Created ${age.days} days ago">${age.label}</span>`:'';
   const estHTML=`<span class="time-est-badge${['5m','15m'].includes(t.est)?' quick':''}" data-est="${t.id}" title="Tap to change estimate" style="cursor:pointer;${!t.est?'opacity:0.35;':''}">⏱${t.est||'est'}</span>`;
-  // Assignee badge — always shown, tappable to reassign
   let ownerHTML = '';
-  if(t.assignee){
-    const ac = getUserColor(t.assignee);
-    ownerHTML = `<span class="owner-badge" data-assign="${t.id}" style="background:${ac}1A;color:${ac};border:1px solid ${ac}66;cursor:pointer;" title="Tap to reassign">➡ ${t.assignee}</span>`;
-  } else {
-    ownerHTML = `<span class="owner-badge" data-assign="${t.id}" style="background:var(--bg3);color:var(--tx3);border:1px solid var(--br2);cursor:pointer;" title="Tap to assign">👤 Anyone</span>`;
-  }
-  const ownerColor = t.assignee ? getUserColor(t.assignee) : (t.ownerColor || (t.owner ? getUserColor(t.owner) : ''));
+  const ownerColor = '';
 
   // Grab live search query for highlighting
   const _sq=document.getElementById('searchInput');
@@ -1865,9 +1698,6 @@ function makeTask(t,isFocus,rank){
   });
   el.querySelectorAll('[data-est]').forEach(badge=>{
     badge.addEventListener('click',e=>{e.stopPropagation();cycleEstimate(t.id,badge);});
-  });
-  el.querySelectorAll('[data-assign]').forEach(badge=>{
-    badge.addEventListener('click',e=>{e.stopPropagation();cycleAssignee(t.id);});
   });
   el.querySelectorAll('[data-park]').forEach(btn=>{
     btn.addEventListener('click',e=>{e.stopPropagation();parkTask(t.id);});
@@ -1978,15 +1808,15 @@ function renderParking(){
 }
 renderParking();
 
-setGroupMode(groupMode);  // applies saved view mode + button styles + renders
+render();
 
 // ── Firebase real-time sync ──────────────────────────
-const DB_URL = 'https://my-todos-c62fd-default-rtdb.firebaseio.com/secure_f1Yx9ug2KnmzEpbg77Nb6Xk5IRh8et6f/household';
+const DB_URL = 'https://my-todos-c62fd-default-rtdb.firebaseio.com/solo_x7wRSyGQPvx3Xs_ap2UvJyEOgJI/mytodos';
 let CLIENT_ID = localStorage.getItem('todo_client_id');
 if(!CLIENT_ID){ CLIENT_ID = Math.random().toString(36).substr(2,9); localStorage.setItem('todo_client_id',CLIENT_ID); }
 
 // Ask for name on first visit
-if(!MY_NAME){ setTimeout(promptForName, 800); }
+
 
 let isSaving = false;
 let lastAppliedAt = 0;
@@ -2016,8 +1846,15 @@ function syncSave(){
   try{localStorage.setItem('todo_v9',JSON.stringify(data));}catch(e){}
 }
 
+function cleanTasks(arr){
+  // Strip out any leftover multi-user fields (owner, assignee, etc.)
+  return (arr||[]).map(t=>{
+    const {owner, assignee, ownerColor, ...rest} = t;
+    return rest;
+  });
+}
 function applyFirebaseData(data){
-  if(data.tasks) tasks=data.tasks;
+  if(data.tasks) tasks=cleanTasks(data.tasks);
   if(data.completedDays) completedDays=new Set(data.completedDays);
   if(data.completionLog) completionLog=data.completionLog;
   if(data.nextId) nextId=data.nextId;
@@ -2050,25 +1887,41 @@ const _origSave=save;
 window.save=function(){ _origSave(); syncSave(); };
 save=window.save;
 
-// On load: ALWAYS pull from Firebase first
-// If Firebase has data, use it. If empty, push ours up.
+// On load: pull from new solo DB. If empty, migrate from old shared path ONCE.
+const OLD_DB_URL = 'https://my-todos-c62fd-default-rtdb.firebaseio.com/secure_f1Yx9ug2KnmzEpbg77Nb6Xk5IRh8et6f/household';
 setTimeout(()=>{
   fetch(DB_URL+'.json')
     .then(r=>r.json())
     .then(data=>{
       if(data && data._at && data.tasks && data.tasks.length>0){
-        // Firebase has data — use it as source of truth
+        // New solo DB has data — use it
         applyFirebaseData(data);
         setSyncUI('synced');
+        setInterval(syncPoll,4000);
       } else {
-        // Firebase is empty — push our local data up
-        syncSave();
+        // New DB empty — try to migrate my tasks from the old shared path
+        fetch(OLD_DB_URL+'.json')
+          .then(r=>r.json())
+          .then(old=>{
+            if(old && old.tasks){
+              // Bring over tasks (stripped of Dani's owner/assignee), history, log
+              tasks = cleanTasks(old.tasks);
+              if(old.completedDays) completedDays = new Set(old.completedDays);
+              if(old.completionLog) completionLog = old.completionLog;
+              if(old.nextId) nextId = old.nextId;
+              if(old.totalElapsed) totalElapsed = old.totalElapsed;
+              if(old.parkedTasks) parkedTasks = old.parkedTasks;
+              if(old.completedHistory) completedHistory = old.completedHistory;
+              render(); renderParking();
+            }
+            // Save the migrated (or default) data to the new solo path
+            syncSave();
+            setInterval(syncPoll,4000);
+          })
+          .catch(()=>{ syncSave(); setInterval(syncPoll,4000); });
       }
-      // Start polling every 4 seconds
-      setInterval(syncPoll,4000);
     })
     .catch(()=>{
-      // Can't reach Firebase — use localStorage, try again later
       setSyncUI('error');
       setInterval(syncPoll,4000);
     });
