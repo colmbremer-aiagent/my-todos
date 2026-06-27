@@ -1030,10 +1030,6 @@ function renderHistory(){
     <div class="history-stat"><div class="h-val">${topCat?CAT_META[topCat[0]]?.label||topCat[0]:'—'}</div><div class="h-lbl">Top area</div></div>
   `;
 
- else {
-    lb.innerHTML = '<div style="font-size:12px;color:var(--tx3);text-align:center;padding:12px;background:var(--bg3);border-radius:12px;">🏆 Complete tasks with a name set to build the weekly leaderboard</div>';
-  }
-
   const list = document.getElementById('historyList');
   if(!done.length){
     list.innerHTML='<div class="history-empty">No completed tasks yet.<br>Start checking things off!</div>';
