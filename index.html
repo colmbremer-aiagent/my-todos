@@ -385,6 +385,8 @@ body{
 .history-group-title{font-size:12px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:0.08em;}
 .history-group-count{font-size:11px;font-weight:700;background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;}
 .history-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg2);border-radius:var(--r-lg);border:1px solid var(--br);margin-bottom:5px;box-shadow:var(--shadow);}
+.history-del{margin-left:auto;width:24px;height:24px;border-radius:50%;border:none;background:transparent;color:var(--tx3);cursor:pointer;font-size:13px;font-weight:700;flex-shrink:0;transition:all 0.15s;display:flex;align-items:center;justify-content:center;}
+.history-del:hover{background:var(--red-bg);color:var(--red);}
 .history-check{width:20px;height:20px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;flex-shrink:0;}
 .history-title{flex:1;font-size:13px;font-weight:600;color:var(--tx2);text-decoration:line-through;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .history-cat{font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;flex-shrink:0;}
@@ -1071,16 +1073,46 @@ function renderHistory(){
         <span class="history-group-count">${grp.length} task${grp.length!==1?'s':''}</span>
       </div>
       ${grp.map(t=>{
+        const tsKey = t.completedTs || 0;
         return `
         <div class="history-item">
           <div class="history-check">✓</div>
           <div class="history-title">${t.title}</div>
           <span class="history-cat badge ${t.cat}">${t.cat}</span>
           ${t.est?`<span style="font-size:10px;color:var(--tx3);font-weight:600;">⏱${t.est}</span>`:''}
+          <button class="history-del" data-title="${encodeURIComponent(t.title)}" data-ts="${tsKey}" data-date="${t.completedAt||''}" title="Delete from history">✕</button>
         </div>`;}).join('')}
     `;
     list.appendChild(groupEl);
   });
+
+  // Wire up delete buttons
+  list.querySelectorAll('.history-del').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const title = decodeURIComponent(btn.dataset.title);
+      const ts = parseInt(btn.dataset.ts) || 0;
+      const date = btn.dataset.date;
+      deleteHistoryItem(title, ts, date);
+    });
+  });
+}
+
+function deleteHistoryItem(title, ts, date){
+  // Remove from the permanent log (match by timestamp if available, else title+date)
+  completedHistory = completedHistory.filter(h=>{
+    if(ts && h.completedTs) return h.completedTs !== ts;
+    return !(h.title===title && (h.completedAt||'')===date);
+  });
+  // Also remove any matching done task from the tasks array
+  tasks = tasks.filter(t=>{
+    if(!t.done) return true;
+    return !(t.title===title && (t.completedAt||'')===date);
+  });
+  save();
+  renderHistory();
+  render();
+  showToast('🗑 Removed from history');
 }
 function setFilter(cat,el){currentFilter=cat;document.querySelectorAll('.filters .pill').forEach(p=>p.classList.remove('active'));el.classList.add('active');render();}
 function setEnergy(e,el){currentEnergy=e;document.querySelectorAll('.epill').forEach(p=>p.classList.remove('active'));el.classList.add('active');render();}
