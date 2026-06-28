@@ -610,7 +610,15 @@ if(typeof sendPrompt === 'undefined') window.sendPrompt = null;
 // Clear any stale theme setting from localStorage
 try{ const s=localStorage.getItem('todo_v9'); if(s){const p=JSON.parse(s);if(p.darkMode!==undefined){delete p.darkMode;localStorage.setItem('todo_v9',JSON.stringify(p));}} }catch(e){}
 
-const todayStr=new Date().toISOString().split('T')[0];
+function localDateStr(d){
+  d = d || new Date();
+  // Build YYYY-MM-DD from LOCAL date components (not UTC)
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+const todayStr=localDateStr();
 document.getElementById('qaDate').min=todayStr;
 document.getElementById('dateLabel').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
 
@@ -942,11 +950,12 @@ function toggle(id){
   if(activeTimer===id){clearInterval(timerInterval);activeTimer=null;timerInterval=null;}
   t.done=!t.done;
   if(t.done){
-    t.completedAt = todayStr;
-    completedDays.add(todayStr);
-    completionLog[todayStr]=(completionLog[todayStr]||0)+1;
-    // Log to permanent history — credit current user if task has no owner/assignee
-    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',completedAt:todayStr,completedTs:Date.now()});
+    const nowStr = localDateStr();  // fresh date, not the stale page-load value
+    t.completedAt = nowStr;
+    completedDays.add(nowStr);
+    completionLog[nowStr]=(completionLog[nowStr]||0)+1;
+    // Log to permanent history
+    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',completedAt:nowStr,completedTs:Date.now()});
     if(completedHistory.length>500) completedHistory=completedHistory.slice(0,500);
     if(t.recur){
       // Build the rescheduled copy
@@ -956,7 +965,7 @@ function toggle(id){
       if(t.recur==='daily') base.setDate(base.getDate()+1);
       else if(t.recur==='weekly') base.setDate(base.getDate()+7);
       else if(t.recur==='monthly') base.setMonth(base.getMonth()+1);
-      next.due=base.toISOString().split('T')[0];
+      next.due=localDateStr(base);
       next.urgent=next.due===todayStr;
       next.createdAt=todayStr;
       // Remove the completed original — rescheduled copy replaces it
@@ -1045,7 +1054,10 @@ function renderHistory(){
     const raw = t.completedAt || null;
     let label = 'Earlier';
     if(raw){
-      const d = new Date(raw); d.setHours(0,0,0,0);
+      // Parse YYYY-MM-DD as LOCAL date (not UTC) to avoid off-by-one-day
+      const parts = raw.split('-');
+      const d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+      d.setHours(0,0,0,0);
       const diff = Math.round((today-d)/86400000);
       if(diff===0) label='Today';
       else if(diff===1) label='Yesterday';
@@ -1185,13 +1197,14 @@ function renderBulkBar(){
 }
 
 function bulkComplete(){
+  const nowStr = localDateStr();  // fresh date
   selectedIds.forEach(id=>{
     const t=tasks.find(t=>t.id===id); if(!t||t.done) return;
     t.done=true;
-    t.completedAt=todayStr;
-    completedDays.add(todayStr);
-    completionLog[todayStr]=(completionLog[todayStr]||0)+1;
-    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',completedAt:todayStr,completedTs:Date.now()});
+    t.completedAt=nowStr;
+    completedDays.add(nowStr);
+    completionLog[nowStr]=(completionLog[nowStr]||0)+1;
+    completedHistory.unshift({title:t.title,cat:t.cat,est:t.est||'',completedAt:nowStr,completedTs:Date.now()});
   });
   if(completedHistory.length>500) completedHistory=completedHistory.slice(0,500);
   const n=selectedIds.size;
@@ -1222,13 +1235,13 @@ function bulkDelete(){
   showToast(`🗑 ${n} task${n!==1?'s':''} deleted`);
 }
 
-function renderStreak(){const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(d);}document.getElementById('streakDays').innerHTML=days.map(d=>{const ds=d.toISOString().split('T')[0];const isToday=ds===todayStr,isDone=completedDays.has(ds);return`<div class="day-dot${isDone?' done':''}${isToday?' today':''}"><div class="dot">${isDone?'✓':''}</div><div class="lbl">${DAYS[d.getDay()]}</div></div>`;}).join('');let streak=0;const c=new Date();while(completedDays.has(c.toISOString().split('T')[0])){streak++;c.setDate(c.getDate()-1);}document.getElementById('streakNum').textContent=streak;}
+function renderStreak(){const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(d);}document.getElementById('streakDays').innerHTML=days.map(d=>{const ds=localDateStr(d);const isToday=ds===todayStr,isDone=completedDays.has(ds);return`<div class="day-dot${isDone?' done':''}${isToday?' today':''}"><div class="dot">${isDone?'✓':''}</div><div class="lbl">${DAYS[d.getDay()]}</div></div>`;}).join('');let streak=0;const c=new Date();while(completedDays.has(localDateStr(c))){streak++;c.setDate(c.getDate()-1);}document.getElementById('streakNum').textContent=streak;}
 
 function renderChart(){const pending=tasks.filter(t=>!t.done);const total=pending.length||1;const counts={};pending.forEach(t=>counts[t.cat]=(counts[t.cat]||0)+1);const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);const max=sorted.length?sorted[0][1]:1;document.getElementById('catChart').innerHTML=sorted.map(([cat,count])=>{const meta=CAT_META[cat]||{label:cat,color:'#888'};return`<div class="cat-row"><div class="cat-name">${meta.label}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round((count/max)*100)}%;background:${meta.color};"></div></div><span style="font-size:11px;color:var(--tx3);min-width:32px;">${count} · ${Math.round((count/total)*100)}%</span></div>`;}).join('')||'<div style="font-size:12px;color:var(--tx3);">All done!</div>';const histDays=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);histDays.push(d);}
-  const counts2=histDays.map(d=>completionLog[d.toISOString().split('T')[0]]||0);
+  const counts2=histDays.map(d=>completionLog[localDateStr(d)]||0);
   const maxH=Math.max(...counts2,1);
   const hc=document.getElementById('histChart');
-  if(hc) hc.innerHTML=histDays.map((d,i)=>{const h=Math.round((counts2[i]/maxH)*64);const isToday=d.toISOString().split('T')[0]===todayStr;return`<div class="hist-bar-wrap"><div class="hist-num">${counts2[i]||''}</div><div class="hist-bar" style="height:${h}px;background:${isToday?'#5B3DE8':'#1B7F4E'};margin-top:auto;"></div><div class="hist-lbl">${DAYS[d.getDay()]}</div></div>`;}).join('');
+  if(hc) hc.innerHTML=histDays.map((d,i)=>{const h=Math.round((counts2[i]/maxH)*64);const isToday=localDateStr(d)===todayStr;return`<div class="hist-bar-wrap"><div class="hist-num">${counts2[i]||''}</div><div class="hist-bar" style="height:${h}px;background:${isToday?'#5B3DE8':'#1B7F4E'};margin-top:auto;"></div><div class="hist-lbl">${DAYS[d.getDay()]}</div></div>`;}).join('');
 }
 
 function editTitle(id, titleEl){
@@ -1819,7 +1832,7 @@ function deferTask(id){
   const t=tasks.find(t=>t.id===id); if(!t) return;
   const tomorrow=new Date();
   tomorrow.setDate(tomorrow.getDate()+1);
-  t.due=tomorrow.toISOString().split('T')[0];
+  t.due=localDateStr(tomorrow);
   t.urgent=false;
   save(); render();
   showToast('⏩ Deferred to tomorrow');
